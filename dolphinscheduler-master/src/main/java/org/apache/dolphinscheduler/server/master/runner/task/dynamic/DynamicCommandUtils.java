@@ -60,6 +60,9 @@ public class DynamicCommandUtils {
         }
 
         addDataToCommandParam(command, CommandKeyConstants.CMD_PARAM_START_PARAMS, JSONUtils.toJsonString(parameters));
+        addDataToCommandParam(command, CommandKeyConstants.CMD_COMMAND_TYPE_PARAMS,
+                CommandType.DYNAMIC_GENERATION.name());
+
         command.setExecutorId(workflowInstance.getExecutorId());
         command.setWarningGroupId(workflowInstance.getWarningGroupId());
         command.setWorkflowInstancePriority(workflowInstance.getWorkflowInstancePriority());

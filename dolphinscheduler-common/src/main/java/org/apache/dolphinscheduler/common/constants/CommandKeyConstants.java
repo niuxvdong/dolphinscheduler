@@ -47,6 +47,8 @@ public class CommandKeyConstants {
 
     public static final String CMD_DYNAMIC_START_PARAMS = "dynamicParams";
 
+    public static final String CMD_COMMAND_TYPE_PARAMS = "commandType";
+
     /**
      * complement data start date
      */

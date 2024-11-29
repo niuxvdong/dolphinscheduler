@@ -70,4 +70,12 @@
             #{i}
         </foreach>
     </delete>
+    <select id="queryCommandByWorkflowInstanceIds" resultType="org.apache.dolphinscheduler.dao.entity.Command">
+        select *
+        from t_ds_command
+        where workflow_instance_id in
+        <foreach collection="workflowInstanceIds" item="workflowInstanceId" open="(" close=")" separator=",">
+            #{workflowInstanceId}
+        </foreach>
+    </select>
 </mapper>

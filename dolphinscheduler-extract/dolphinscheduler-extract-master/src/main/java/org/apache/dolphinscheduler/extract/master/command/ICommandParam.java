@@ -33,6 +33,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
         @JsonSubTypes.Type(value = ReRunWorkflowCommandParam.class, name = "REPEAT_RUNNING"),
         @JsonSubTypes.Type(value = RecoverFailureTaskCommandParam.class, name = "START_FAILURE_TASK_PROCESS"),
         @JsonSubTypes.Type(value = WorkflowFailoverCommandParam.class, name = "RECOVER_TOLERANCE_FAULT"),
+        @JsonSubTypes.Type(value = DynamicGenerationCommandParam.class, name = "DYNAMIC_GENERATION"),
 })
 public interface ICommandParam {
 

@@ -31,11 +31,14 @@ import org.apache.dolphinscheduler.plugin.task.api.model.Property;
 import org.apache.dolphinscheduler.server.master.runner.execute.AsyncTaskExecuteFunction;
 import org.apache.dolphinscheduler.service.subworkflow.SubWorkflowService;
 
+import org.apache.commons.collections4.CollectionUtils;
+
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -77,12 +80,25 @@ public class DynamicAsyncTaskExecuteFunction implements AsyncTaskExecuteFunction
 
     @Override
     public @NonNull AsyncTaskExecutionStatus getAsyncTaskExecutionStatus() {
+        // first query all subInstanceIds
+        List<Long> allSubWorkflowInstanceIds = getAllSubProcessInstanceIds();
+        if (CollectionUtils.isEmpty(allSubWorkflowInstanceIds)) {
+            log.warn("This dynamic task has no sub workflow instances to run");
+            return AsyncTaskExecutionStatus.SUCCESS;
+        }
+        // second query allCommand
+        Map<Integer, List<Command>> hasExistCommandMap =
+                commandMapper.queryCommandByWorkflowInstanceIds(allSubWorkflowInstanceIds).stream()
+                        .collect(Collectors.groupingBy(Command::getWorkflowInstanceId));
+        // third query all subInstances
         List<WorkflowInstance> allSubWorkflowInstance = getAllSubProcessInstance();
-        int totalSubProcessInstanceCount = allSubWorkflowInstance.size();
 
+        List<WorkflowInstance> waitToRunWorkflowInstances =
+                subWorkflowService.filterWaitToRunProcessInstances(allSubWorkflowInstance);
         List<WorkflowInstance> finishedSubWorkflowInstance =
                 subWorkflowService.filterFinishProcessInstances(allSubWorkflowInstance);
 
+        int totalSubProcessInstanceCount = allSubWorkflowInstanceIds.size();
         if (finishedSubWorkflowInstance.size() == totalSubProcessInstanceCount) {
             log.info("all sub process instance finish");
             int successCount = subWorkflowService.filterSuccessProcessInstances(finishedSubWorkflowInstance).size();
@@ -95,6 +111,7 @@ public class DynamicAsyncTaskExecuteFunction implements AsyncTaskExecuteFunction
                 int failedCount = totalSubProcessInstanceCount - successCount;
                 log.info("failed sub process instance count: {}", failedCount);
                 return AsyncTaskExecutionStatus.FAILED;
+
             }
         }
 
@@ -106,7 +123,7 @@ public class DynamicAsyncTaskExecuteFunction implements AsyncTaskExecuteFunction
         int startCount = degreeOfParallelism - runningCount;
         if (startCount > 0) {
             log.info("There are {} sub process instances that can be started", startCount);
-            startSubProcessInstances(allSubWorkflowInstance, startCount);
+            startSubProcessInstances(hasExistCommandMap, waitToRunWorkflowInstances, startCount);
         }
         // query the status of sub workflow instance
         return AsyncTaskExecutionStatus.RUNNING;
@@ -148,12 +165,23 @@ public class DynamicAsyncTaskExecuteFunction implements AsyncTaskExecuteFunction
         log.info("set property: {}", property);
     }
 
-    private void startSubProcessInstances(List<WorkflowInstance> allSubWorkflowInstance, int startCount) {
-        List<WorkflowInstance> waitingWorkflowInstances =
-                subWorkflowService.filterWaitToRunProcessInstances(allSubWorkflowInstance);
+    private void startSubProcessInstances(Map<Integer, List<Command>> hasExistCommandMap,
+                                          List<WorkflowInstance> waitToRunWorkflowInstances,
+                                          int startCount) {
 
-        for (int i = 0; i < Math.min(startCount, waitingWorkflowInstances.size()); i++) {
-            WorkflowInstance subWorkflowInstance = waitingWorkflowInstances.get(i);
+        int newHandleCount = 0;
+        for (int i = 0; i < waitToRunWorkflowInstances.size() && newHandleCount < startCount; i++) {
+            WorkflowInstance subWorkflowInstance = waitToRunWorkflowInstances.get(i);
+
+            if (hasExistCommandMap.containsKey(subWorkflowInstance.getId())) {
+                log.info("the subWorkflowInstance id {} already exist command {}, will filter",
+                        subWorkflowInstance.getId(),
+                        hasExistCommandMap.get(subWorkflowInstance.getId()));
+                continue;
+            }
+
+            newHandleCount++;
+
             Map<String, String> parameters = JSONUtils.toMap(DynamicCommandUtils
                     .getDataFromCommandParam(subWorkflowInstance.getCommandParam(), CMD_DYNAMIC_START_PARAMS));
             Command command = DynamicCommandUtils.createCommand(this.workflowInstance,
@@ -169,6 +197,10 @@ public class DynamicAsyncTaskExecuteFunction implements AsyncTaskExecuteFunction
 
     public List<WorkflowInstance> getAllSubProcessInstance() {
         return subWorkflowService.getAllDynamicSubWorkflow(workflowInstance.getId(), taskInstance.getTaskCode());
+    }
+
+    public List<Long> getAllSubProcessInstanceIds() {
+        return subWorkflowService.getAllDynamicSubWorkflowIds(workflowInstance.getId(), taskInstance.getTaskCode());
     }
 
     @Override

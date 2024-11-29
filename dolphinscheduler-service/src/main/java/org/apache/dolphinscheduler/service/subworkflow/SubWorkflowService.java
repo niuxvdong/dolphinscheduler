@@ -43,4 +43,6 @@ public interface SubWorkflowService {
     List<WorkflowInstance> filterFailedProcessInstances(List<WorkflowInstance> workflowInstanceList);
 
     List<Property> getWorkflowOutputParameters(WorkflowInstance workflowInstance);
+
+    List<Long> getAllDynamicSubWorkflowIds(long workflowInstanceId, long taskCode);
 }

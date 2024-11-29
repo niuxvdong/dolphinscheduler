@@ -116,4 +116,12 @@ public class SubWorkflowServiceImpl implements SubWorkflowService {
         return outputParamList;
 
     }
+
+    @Override
+    public List<Long> getAllDynamicSubWorkflowIds(long workflowInstanceId, long taskCode) {
+        List<RelationSubWorkflow> relationSubWorkflows =
+                relationSubWorkflowMapper.queryAllSubWorkflowInstance(workflowInstanceId, taskCode);
+        return relationSubWorkflows.stream()
+                .map(RelationSubWorkflow::getSubWorkflowInstanceId).collect(Collectors.toList());
+    }
 }
