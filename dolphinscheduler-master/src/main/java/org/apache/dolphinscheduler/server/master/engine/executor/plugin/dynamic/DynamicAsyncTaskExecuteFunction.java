@@ -33,7 +33,6 @@ import org.apache.dolphinscheduler.service.subworkflow.SubWorkflowService;
 
 import org.apache.commons.collections4.CollectionUtils;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -45,8 +44,6 @@ import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class DynamicAsyncTaskExecuteFunction {
-
-    private static final Duration TASK_EXECUTE_STATE_CHECK_INTERVAL = Duration.ofSeconds(10);
 
     private static final String OUTPUT_KEY = "dynamic.out";
 
@@ -78,13 +75,12 @@ public class DynamicAsyncTaskExecuteFunction {
         this.subWorkflowService = subWorkflowService;
     }
 
-    @Override
     public @NonNull TaskExecutionStatus getAsyncTaskExecutionStatus() {
         // first query all subInstanceIds
         List<Long> allSubWorkflowInstanceIds = getAllSubProcessInstanceIds();
         if (CollectionUtils.isEmpty(allSubWorkflowInstanceIds)) {
             log.warn("This dynamic task has no sub workflow instances to run");
-            return AsyncTaskExecutionStatus.SUCCESS;
+            return TaskExecutionStatus.SUCCESS;
         }
         // second query allCommand
         Map<Integer, List<Command>> hasExistCommandMap =
@@ -201,10 +197,4 @@ public class DynamicAsyncTaskExecuteFunction {
     public List<Long> getAllSubProcessInstanceIds() {
         return subWorkflowService.getAllDynamicSubWorkflowIds(workflowInstance.getId(), taskInstance.getTaskCode());
     }
-
-    @Override
-    public @NonNull Duration getAsyncTaskStateCheckInterval() {
-        return TASK_EXECUTE_STATE_CHECK_INTERVAL;
-    }
-
 }

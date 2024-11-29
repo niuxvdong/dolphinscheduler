@@ -83,6 +83,8 @@ public class DynamicLogicTask extends AbstractLogicTask<DynamicParameters> {
 
     private boolean haveBeenCanceled = false;
 
+    private DynamicAsyncTaskExecuteFunction dynamicAsyncTaskExecuteFunction;
+
     public DynamicLogicTask(TaskExecutionContext taskExecutionContext,
                             WorkflowInstanceDao workflowInstanceDao,
                             TaskInstanceDao taskInstanceDao,
@@ -101,28 +103,6 @@ public class DynamicLogicTask extends AbstractLogicTask<DynamicParameters> {
         this.workflowInstance = workflowInstanceDao.queryById(taskExecutionContext.getWorkflowInstanceId());
         this.taskInstance = taskInstanceDao.queryById(taskExecutionContext.getTaskInstanceId());
     }
-
-    // public AsyncTaskExecuteFunction getAsyncTaskExecuteFunction() throws MasterTaskExecuteException {
-    // List<Map<String, String>> parameterGroup = generateParameterGroup();
-    //
-    // if (parameterGroup.size() > dynamicParameters.getMaxNumOfSubWorkflowInstances()) {
-    // log.warn("the number of sub process instances [{}] exceeds the maximum limit [{}]", parameterGroup.size(),
-    // dynamicParameters.getMaxNumOfSubWorkflowInstances());
-    // parameterGroup = parameterGroup.subList(0, dynamicParameters.getMaxNumOfSubWorkflowInstances());
-    // }
-    //
-    // // if already exists sub process instance, do not generate again
-    // List<WorkflowInstance> existsSubWorkflowInstanceList =
-    // subWorkflowService.getAllDynamicSubWorkflow(workflowInstance.getId(), taskInstance.getTaskCode());
-    // if (CollectionUtils.isEmpty(existsSubWorkflowInstanceList)) {
-    // generateSubWorkflowInstance(parameterGroup);
-    // } else {
-    // resetProcessInstanceStatus(existsSubWorkflowInstanceList);
-    // }
-    // return new DynamicAsyncTaskExecuteFunction(taskExecutionContext, workflowInstance, taskInstance, this,
-    // commandMapper,
-    // subWorkflowService, dynamicParameters.getDegreeOfParallelism());
-    // }
 
     public void resetProcessInstanceStatus(List<WorkflowInstance> existsSubWorkflowInstanceList) {
         switch (workflowInstance.getCommandType()) {
@@ -253,12 +233,31 @@ public class DynamicLogicTask extends AbstractLogicTask<DynamicParameters> {
 
     @Override
     public void start() throws MasterTaskExecuteException {
-        // todo:
+        List<Map<String, String>> parameterGroup = generateParameterGroup();
+
+        if (parameterGroup.size() > taskParameters.getMaxNumOfSubWorkflowInstances()) {
+            log.warn("the number of sub process instances [{}] exceeds the maximum limit [{}]", parameterGroup.size(),
+                    taskParameters.getMaxNumOfSubWorkflowInstances());
+            parameterGroup = parameterGroup.subList(0, taskParameters.getMaxNumOfSubWorkflowInstances());
+        }
+
+        // if already exists sub process instance, do not generate again
+        List<WorkflowInstance> existsSubWorkflowInstanceList =
+                subWorkflowService.getAllDynamicSubWorkflow(workflowInstance.getId(), taskInstance.getTaskCode());
+        if (CollectionUtils.isEmpty(existsSubWorkflowInstanceList)) {
+            generateSubWorkflowInstance(parameterGroup);
+        } else {
+            resetProcessInstanceStatus(existsSubWorkflowInstanceList);
+        }
+        dynamicAsyncTaskExecuteFunction =
+                new DynamicAsyncTaskExecuteFunction(taskExecutionContext, workflowInstance, taskInstance, this,
+                        commandMapper,
+                        subWorkflowService, taskParameters.getDegreeOfParallelism());
     }
 
     @Override
     public TaskExecutionStatus getTaskExecutionState() {
-        return taskExecutionContext.getCurrentExecutionStatus();
+        return dynamicAsyncTaskExecuteFunction.getAsyncTaskExecutionStatus();
     }
 
     @Override
