@@ -55,7 +55,12 @@ public class MasterConfig implements Validator {
      */
     private Duration maxHeartbeatInterval = Duration.ofSeconds(10);
 
-    private MasterServerLoadProtection serverLoadProtection = new MasterServerLoadProtection();
+    /**
+     * Whether to kill Yarn/K8s applications before regenerating a task instance during task failover.
+     */
+    private boolean killApplicationWhenTaskFailover = true;
+
+    private MasterServerLoadProtectionConfig serverLoadProtection = new MasterServerLoadProtectionConfig();
 
     private Duration workerGroupRefreshInterval = Duration.ofMinutes(5);
 
@@ -73,6 +78,12 @@ public class MasterConfig implements Validator {
      * The registry path for the master server in the format '/nodes/master/ip:listenPort'.
      */
     private String masterRegistryPath;
+
+    private TaskDispatchPolicy taskDispatchPolicy = new TaskDispatchPolicy();
+
+    public boolean isKillApplicationWhenTaskFailover() {
+        return killApplicationWhenTaskFailover;
+    }
 
     @Override
     public boolean supports(Class<?> clazz) {
@@ -97,9 +108,22 @@ public class MasterConfig implements Validator {
         if (masterConfig.getWorkerGroupRefreshInterval().getSeconds() < 10) {
             errors.rejectValue("worker-group-refresh-interval", null, "should >= 10s");
         }
+
+        TaskDispatchPolicy dispatchPolicy = masterConfig.getTaskDispatchPolicy();
+        if (dispatchPolicy.isDispatchTimeoutEnabled()) {
+            if (dispatchPolicy.getMaxTaskDispatchDuration() == null) {
+                errors.rejectValue("dispatch-timeout-checker.max-task-dispatch-duration", null,
+                        "must be specified when dispatch timeout checker is enabled");
+            } else if (dispatchPolicy.getMaxTaskDispatchDuration().toMillis() <= 0) {
+                errors.rejectValue("dispatch-timeout-checker.max-task-dispatch-duration", null,
+                        "must be a positive duration (e.g., '10m', '30m', '1h')");
+            }
+        }
+
         if (StringUtils.isEmpty(masterConfig.getMasterAddress())) {
             masterConfig.setMasterAddress(NetUtils.getAddr(masterConfig.getListenPort()));
         }
+        serverLoadProtection.validate(errors);
         commandFetchStrategy.validate(errors);
         workerLoadBalancerConfigurationProperties.validate(errors);
 
@@ -115,6 +139,7 @@ public class MasterConfig implements Validator {
                         "\n  workflow-event-bus-fire-thread-count -> " + workflowEventBusFireThreadCount +
                         "\n  logic-task-config -> " + logicTaskConfig +
                         "\n  max-heartbeat-interval -> " + maxHeartbeatInterval +
+                        "\n  kill-application-when-task-failover -> " + isKillApplicationWhenTaskFailover() +
                         "\n  server-load-protection -> " + serverLoadProtection +
                         "\n  master-address -> " + masterAddress +
                         "\n  master-registry-path: " + masterRegistryPath +
@@ -122,6 +147,7 @@ public class MasterConfig implements Validator {
                         "\n  command-fetch-strategy: " + commandFetchStrategy +
                         "\n  worker-load-balancer-configuration-properties: "
                         + workerLoadBalancerConfigurationProperties +
+                        "\n  taskDispatchPolicy: " + taskDispatchPolicy +
                         "\n****************************Master Configuration**************************************";
         log.info(config);
     }

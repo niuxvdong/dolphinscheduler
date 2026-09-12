@@ -17,18 +17,17 @@
 
 package org.apache.dolphinscheduler.server.master.engine.task.lifecycle.handler;
 
-import org.apache.dolphinscheduler.dao.entity.TaskDefinition;
 import org.apache.dolphinscheduler.dao.entity.TaskInstance;
 import org.apache.dolphinscheduler.dao.entity.WorkflowInstance;
 import org.apache.dolphinscheduler.plugin.task.api.enums.TaskTimeoutStrategy;
 import org.apache.dolphinscheduler.server.master.engine.ILifecycleEventType;
 import org.apache.dolphinscheduler.server.master.engine.graph.IWorkflowExecutionGraph;
+import org.apache.dolphinscheduler.server.master.engine.task.execution.ITaskExecution;
 import org.apache.dolphinscheduler.server.master.engine.task.lifecycle.TaskLifecycleEventType;
 import org.apache.dolphinscheduler.server.master.engine.task.lifecycle.event.TaskKillLifecycleEvent;
 import org.apache.dolphinscheduler.server.master.engine.task.lifecycle.event.TaskTimeoutLifecycleEvent;
-import org.apache.dolphinscheduler.server.master.engine.task.runnable.ITaskExecutionRunnable;
 import org.apache.dolphinscheduler.server.master.engine.task.statemachine.ITaskStateAction;
-import org.apache.dolphinscheduler.server.master.engine.workflow.runnable.IWorkflowExecutionRunnable;
+import org.apache.dolphinscheduler.server.master.engine.workflow.execution.IWorkflowExecution;
 import org.apache.dolphinscheduler.service.alert.WorkflowAlertManager;
 
 import lombok.extern.slf4j.Slf4j;
@@ -47,51 +46,61 @@ public class TaskTimeoutLifecycleEventHandler extends AbstractTaskLifecycleEvent
 
     @Override
     public void handle(final ITaskStateAction taskStateAction,
-                       final IWorkflowExecutionRunnable workflowExecutionRunnable,
-                       final ITaskExecutionRunnable taskExecutionRunnable,
+                       final IWorkflowExecution workflowExecution,
+                       final ITaskExecution taskExecution,
                        final TaskTimeoutLifecycleEvent taskTimeoutLifecycleEvent) {
-        final IWorkflowExecutionGraph workflowExecutionGraph = workflowExecutionRunnable.getWorkflowExecutionGraph();
-        if (!workflowExecutionGraph.isTaskExecutionRunnableActive(taskExecutionRunnable)) {
+        final IWorkflowExecutionGraph workflowExecutionGraph = workflowExecution.getWorkflowExecutionGraph();
+        if (!workflowExecutionGraph.isTaskExecutionActive(taskExecution)) {
             // The task instance is not active, means it is already finished.
             return;
         }
-        final TaskDefinition taskDefinition = taskExecutionRunnable.getTaskDefinition();
-        final String taskName = taskExecutionRunnable.getName();
-        final TaskTimeoutStrategy timeoutNotifyStrategy = taskDefinition.getTimeoutNotifyStrategy();
+        final String taskName = taskExecution.getName();
+        final TaskTimeoutStrategy timeoutNotifyStrategy = taskTimeoutLifecycleEvent.getTimeoutStrategy();
         if (timeoutNotifyStrategy == null) {
             log.info("The task {} TimeoutStrategy is null.", taskName);
             return;
         }
+
+        final WorkflowInstance workflowInstance = workflowExecution.getWorkflowInstance();
+        final boolean shouldSendAlert = workflowInstance.getWarningGroupId() != null;
+
         switch (timeoutNotifyStrategy) {
             case WARN:
                 log.info("The task {} TimeoutStrategy is WARN, try to send a timeout alert.", taskName);
-                doTaskTimeoutAlert(taskExecutionRunnable);
+                if (shouldSendAlert) {
+                    doTaskTimeoutAlert(taskExecution);
+                } else {
+                    log.info("Skipped sending timeout alert for task {} because warningGroupId is null.", taskName);
+                }
                 break;
             case FAILED:
                 log.info("The task {} TimeoutStrategy is FAILED, try to publish a kill event.", taskName);
-                doTaskTimeoutKill(taskExecutionRunnable);
+                doTaskTimeoutKill(taskExecution);
                 break;
             case WARNFAILED:
                 log.info(
                         "The task {} TimeoutStrategy is WARNFAILED, try to publish a kill event and send a timeout alert.",
                         taskName);
-                doTaskTimeoutKill(taskExecutionRunnable);
-                doTaskTimeoutAlert(taskExecutionRunnable);
+                doTaskTimeoutKill(taskExecution);
+                if (shouldSendAlert) {
+                    doTaskTimeoutAlert(taskExecution);
+                } else {
+                    log.info("Skipped sending timeout alert for task {} because warningGroupId is null.", taskName);
+                }
             default:
                 log.warn("The task {} TimeoutStrategy is invalided.", taskName);
                 break;
         }
     }
 
-    private void doTaskTimeoutKill(final ITaskExecutionRunnable taskExecutionRunnable) {
-        taskExecutionRunnable.getWorkflowEventBus().publish(TaskKillLifecycleEvent.of(taskExecutionRunnable));
+    private void doTaskTimeoutKill(final ITaskExecution taskExecution) {
+        taskExecution.getWorkflowEventBus().publish(TaskKillLifecycleEvent.of(taskExecution));
     }
 
-    private void doTaskTimeoutAlert(final ITaskExecutionRunnable taskExecutionRunnable) {
-        final WorkflowInstance workflowInstance = taskExecutionRunnable.getWorkflowInstance();
-        final TaskInstance taskInstance = taskExecutionRunnable.getTaskInstance();
-        // todo: inject the projectUser
-        workflowAlertManager.sendTaskTimeoutAlert(workflowInstance, taskInstance, null);
+    private void doTaskTimeoutAlert(final ITaskExecution taskExecution) {
+        final WorkflowInstance workflowInstance = taskExecution.getWorkflowInstance();
+        final TaskInstance taskInstance = taskExecution.getTaskInstance();
+        workflowAlertManager.sendTaskTimeoutAlert(workflowInstance, taskInstance);
     }
 
     @Override

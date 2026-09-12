@@ -24,6 +24,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.apache.dolphinscheduler.server.master.cluster.loadbalancer.WorkerLoadBalancerConfigurationProperties;
 import org.apache.dolphinscheduler.server.master.cluster.loadbalancer.WorkerLoadBalancerType;
 
+import java.time.Duration;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -38,7 +40,7 @@ public class MasterConfigTest {
 
     @Test
     public void getServerLoadProtection() {
-        MasterServerLoadProtection serverLoadProtection = masterConfig.getServerLoadProtection();
+        MasterServerLoadProtectionConfig serverLoadProtection = masterConfig.getServerLoadProtection();
         assertTrue(serverLoadProtection.isEnabled());
         assertEquals(0.9, serverLoadProtection.getMaxSystemCpuUsagePercentageThresholds());
         assertEquals(0.9, serverLoadProtection.getMaxJvmCpuUsagePercentageThresholds());
@@ -71,5 +73,19 @@ public class MasterConfigTest {
         assertThat(dynamicWeightConfigProperties.getMemoryUsageWeight()).isEqualTo(40);
         assertThat(dynamicWeightConfigProperties.getCpuUsageWeight()).isEqualTo(30);
         assertThat(dynamicWeightConfigProperties.getTaskThreadPoolUsageWeight()).isEqualTo(30);
+    }
+
+    @Test
+    public void getTaskDispatchPolicy() {
+        TaskDispatchPolicy policy = masterConfig.getTaskDispatchPolicy();
+
+        assertThat(policy).isNotNull();
+        assertThat(policy.isDispatchTimeoutEnabled()).isFalse();
+        assertThat(policy.getMaxTaskDispatchDuration()).isEqualTo(Duration.ofHours(1));
+    }
+
+    @Test
+    public void getKillApplicationWhenTaskFailover() {
+        assertThat(masterConfig.isKillApplicationWhenTaskFailover()).isTrue();
     }
 }

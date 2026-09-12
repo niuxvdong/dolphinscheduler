@@ -26,17 +26,20 @@ import org.apache.dolphinscheduler.common.thread.ThreadUtils;
 import org.apache.dolphinscheduler.common.utils.JSONUtils;
 import org.apache.dolphinscheduler.dao.entity.Command;
 import org.apache.dolphinscheduler.dao.entity.WorkflowInstance;
+import org.apache.dolphinscheduler.dao.repository.WorkflowInstanceDao;
 import org.apache.dolphinscheduler.meter.metrics.MetricsProvider;
 import org.apache.dolphinscheduler.meter.metrics.SystemMetrics;
+import org.apache.dolphinscheduler.plugin.task.api.utils.LogUtils;
 import org.apache.dolphinscheduler.server.master.config.MasterConfig;
 import org.apache.dolphinscheduler.server.master.config.MasterServerLoadProtection;
 import org.apache.dolphinscheduler.server.master.engine.IWorkflowRepository;
 import org.apache.dolphinscheduler.server.master.engine.WorkflowEventBusCoordinator;
 import org.apache.dolphinscheduler.server.master.engine.exceptions.CommandDuplicateHandleException;
+import org.apache.dolphinscheduler.server.master.engine.workflow.execution.IWorkflowExecution;
+import org.apache.dolphinscheduler.server.master.engine.workflow.execution.WorkflowExecutionFactory;
 import org.apache.dolphinscheduler.server.master.engine.workflow.lifecycle.event.WorkflowStartLifecycleEvent;
-import org.apache.dolphinscheduler.server.master.engine.workflow.runnable.IWorkflowExecutionRunnable;
-import org.apache.dolphinscheduler.server.master.engine.workflow.runnable.WorkflowExecutionRunnableFactory;
 import org.apache.dolphinscheduler.server.master.metrics.MasterServerMetrics;
+import org.apache.dolphinscheduler.server.master.metrics.WorkflowInstanceMetrics;
 import org.apache.dolphinscheduler.service.command.CommandService;
 
 import org.apache.commons.collections4.CollectionUtils;
@@ -51,6 +54,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Master scheduler thread, this thread will consume the commands from database and trigger processInstance executed.
@@ -69,16 +73,25 @@ public class CommandEngine extends BaseDaemonThread implements AutoCloseable {
     private MasterConfig masterConfig;
 
     @Autowired
+    private MasterServerLoadProtection masterServerLoadProtection;
+
+    @Autowired
     private IWorkflowRepository workflowRepository;
 
     @Autowired
-    private WorkflowExecutionRunnableFactory workflowExecutionRunnableFactory;
+    private WorkflowInstanceDao workflowInstanceDao;
+
+    @Autowired
+    private WorkflowExecutionFactory workflowExecutionFactory;
 
     @Autowired
     private MetricsProvider metricsProvider;
 
     @Autowired
     private WorkflowEventBusCoordinator workflowEventBusCoordinator;
+
+    @Autowired
+    private TransactionTemplate transactionTemplate;
 
     private ExecutorService commandHandleThreadPool;
 
@@ -107,12 +120,11 @@ public class CommandEngine extends BaseDaemonThread implements AutoCloseable {
 
     @Override
     public void run() {
-        MasterServerLoadProtection serverLoadProtection = masterConfig.getServerLoadProtection();
         while (flag) {
             try {
                 // todo: if the workflow event queue is much, we need to handle the back pressure
                 SystemMetrics systemMetrics = metricsProvider.getSystemMetrics();
-                if (serverLoadProtection.isOverload(systemMetrics)) {
+                if (masterServerLoadProtection.isOverload(systemMetrics)) {
                     log.warn("The current server is overload, cannot consumes commands.");
                     MasterServerMetrics.incMasterOverload();
                     Thread.sleep(Constants.SLEEP_TIME_MILLIS);
@@ -127,10 +139,15 @@ public class CommandEngine extends BaseDaemonThread implements AutoCloseable {
 
                 List<CompletableFuture<Void>> allCompleteFutures = new ArrayList<>();
                 for (Command command : commands) {
-                    CompletableFuture<Void> completableFuture = bootstrapCommand(command)
-                            .thenAccept(this::bootstrapWorkflowExecutionRunnable)
+                    CompletableFuture<Void> completableFuture = supplyAsync(() -> {
+                        LogUtils.setWorkflowInstanceIdMDC(command.getWorkflowInstanceId());
+                        return command;
+                    }, commandHandleThreadPool)
+                            .thenApply(this::bootstrapCommand)
+                            .thenAccept(this::bootstrapWorkflowExecution)
                             .thenAccept((unused) -> bootstrapSuccess(command))
-                            .exceptionally(throwable -> bootstrapError(command, throwable));
+                            .exceptionally(throwable -> bootstrapError(command, throwable))
+                            .whenComplete((result, throwable) -> LogUtils.removeWorkflowInstanceIdMDC());
                     allCompleteFutures.add(completableFuture);
                 }
                 CompletableFuture.allOf(allCompleteFutures.toArray(new CompletableFuture[0])).join();
@@ -146,14 +163,14 @@ public class CommandEngine extends BaseDaemonThread implements AutoCloseable {
         }
     }
 
-    private CompletableFuture<IWorkflowExecutionRunnable> bootstrapCommand(Command command) {
-        return supplyAsync(
-                () -> workflowExecutionRunnableFactory.createWorkflowExecuteRunnable(command), commandHandleThreadPool);
+    private IWorkflowExecution bootstrapCommand(Command command) {
+        return workflowExecutionFactory.createWorkflowExecuteRunnable(command);
     }
 
-    private CompletableFuture<Void> bootstrapWorkflowExecutionRunnable(IWorkflowExecutionRunnable workflowExecutionRunnable) {
+    private CompletableFuture<Void> bootstrapWorkflowExecution(IWorkflowExecution workflowExecution) {
         final WorkflowInstance workflowInstance =
-                workflowExecutionRunnable.getWorkflowExecuteContext().getWorkflowInstance();
+                workflowExecution.getWorkflowExecuteContext().getWorkflowInstance();
+
         if (workflowInstance.getState() == WorkflowExecutionStatus.SERIAL_WAIT) {
             log.info("The workflow {} state is: {} will not be trigger now",
                     workflowInstance.getName(),
@@ -161,10 +178,11 @@ public class CommandEngine extends BaseDaemonThread implements AutoCloseable {
             return CompletableFuture.completedFuture(null);
         }
 
-        workflowRepository.put(workflowExecutionRunnable);
-        workflowEventBusCoordinator.registerWorkflowEventBus(workflowExecutionRunnable);
-        workflowExecutionRunnable.getWorkflowEventBus()
-                .publish(WorkflowStartLifecycleEvent.of(workflowExecutionRunnable));
+        WorkflowInstanceMetrics.recordWorkflowInstanceSubmit(workflowInstance.getWorkflowDefinitionCode());
+        workflowRepository.put(workflowExecution);
+        workflowEventBusCoordinator.registerWorkflowEventBus(workflowExecution);
+        workflowExecution.getWorkflowEventBus()
+                .publish(WorkflowStartLifecycleEvent.of(workflowExecution));
         return CompletableFuture.completedFuture(null);
     }
 
@@ -175,14 +193,29 @@ public class CommandEngine extends BaseDaemonThread implements AutoCloseable {
     }
 
     private Void bootstrapError(Command command, Throwable throwable) {
-        if (throwable instanceof CommandDuplicateHandleException) {
+        // The exception is raised inside a CompletableFuture chain, so it arrives here wrapped in
+        // CompletionException, which a direct instanceof check cannot see through. See #18570.
+        if (ExceptionUtils.throwableOfType(throwable, CommandDuplicateHandleException.class) != null) {
             log.warn("Handle command failed, the command: {} has been handled by other master",
                     command,
                     throwable);
             return null;
         }
-        log.error("Failed bootstrap command {} ", JSONUtils.toPrettyJsonString(command), throwable);
-        commandService.moveToErrorCommand(command, ExceptionUtils.getStackTrace(throwable));
+
+        transactionTemplate.execute(status -> {
+            log.warn("Failed bootstrap command {} ", JSONUtils.toPrettyJsonString(command), throwable);
+            final int workflowInstanceId = command.getWorkflowInstanceId();
+
+            workflowInstanceDao.forceUpdateWorkflowInstanceState(workflowInstanceId, WorkflowExecutionStatus.FAILURE);
+            WorkflowInstanceMetrics.recordWorkflowInstanceFinish(
+                    WorkflowExecutionStatus.FAILURE,
+                    command.getWorkflowDefinitionCode());
+            log.info("Set workflow instance {} state to FAILURE", workflowInstanceId);
+
+            commandService.moveToErrorCommand(command, ExceptionUtils.getStackTrace(throwable));
+            log.info("Move command {} to error command table", command.getId());
+            return null;
+        });
         return null;
     }
 

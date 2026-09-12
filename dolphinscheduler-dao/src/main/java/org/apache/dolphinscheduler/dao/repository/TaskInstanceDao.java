@@ -17,16 +17,19 @@
 
 package org.apache.dolphinscheduler.dao.repository;
 
+import org.apache.dolphinscheduler.common.enums.TaskExecuteType;
 import org.apache.dolphinscheduler.dao.entity.TaskInstance;
 import org.apache.dolphinscheduler.dao.entity.WorkflowInstance;
+import org.apache.dolphinscheduler.dao.model.TaskInstanceStatusCountDto;
 import org.apache.dolphinscheduler.plugin.task.api.enums.TaskExecutionStatus;
 
+import java.util.Collection;
+import java.util.Date;
 import java.util.List;
 import java.util.Set;
 
-/**
- * Task Instance DAO
- */
+import com.baomidou.mybatisplus.core.metadata.IPage;
+
 public interface TaskInstanceDao extends IDao<TaskInstance> {
 
     /**
@@ -57,10 +60,9 @@ public interface TaskInstanceDao extends IDao<TaskInstance> {
      * Query list of valid task instance by workflow instance id
      *
      * @param workflowInstanceId workflowInstanceId
-     * @param testFlag          test flag
      * @return list of valid task instance
      */
-    List<TaskInstance> queryValidTaskListByWorkflowInstanceId(Integer workflowInstanceId, int testFlag);
+    List<TaskInstance> queryValidTaskListByWorkflowInstanceId(Integer workflowInstanceId);
 
     /**
      * Query list of task instance by workflow instance id and task code
@@ -88,23 +90,55 @@ public interface TaskInstanceDao extends IDao<TaskInstance> {
      *
      * @param workflowInstanceId Task's parent workflow instance id
      * @param taskCodes         taskCodes
-     * @param testFlag          test flag
      * @return task instance list
      */
     List<TaskInstance> queryLastTaskInstanceListIntervalInWorkflowInstance(Integer workflowInstanceId,
-                                                                           Set<Long> taskCodes, int testFlag);
+                                                                           Set<Long> taskCodes);
 
     /**
      * find last task instance corresponding to taskCode in the date interval
      *
      * @param workflowInstanceId Task's parent workflow instance id
      * @param depTaskCode       taskCode
-     * @param testFlag          test flag
      * @return task instance
      */
     TaskInstance queryLastTaskInstanceIntervalInWorkflowInstance(Integer workflowInstanceId,
-                                                                 long depTaskCode, int testFlag);
+                                                                 long depTaskCode);
 
     void updateTaskInstanceState(Integer taskInstanceId, TaskExecutionStatus originState,
                                  TaskExecutionStatus targetState);
+
+    List<TaskInstanceStatusCountDto> countTaskInstanceStateByProjectCodes(Date startTime,
+                                                                          Date endTime,
+                                                                          Collection<Long> projectCodes);
+
+    List<TaskInstance> queryByWorkflowInstanceIdsAndTaskCodes(List<Integer> workflowInstanceIds,
+                                                              List<Long> taskCodes);
+
+    IPage<TaskInstance> queryTaskInstanceListPaging(IPage<TaskInstance> page,
+                                                    Long projectCode,
+                                                    Integer workflowInstanceId,
+                                                    String workflowInstanceName,
+                                                    String searchVal,
+                                                    String taskName,
+                                                    Long taskCode,
+                                                    String executorName,
+                                                    int[] statusArray,
+                                                    String host,
+                                                    TaskExecuteType taskExecuteType,
+                                                    Date startTime,
+                                                    Date endTime);
+
+    IPage<TaskInstance> queryStreamTaskInstanceListPaging(IPage<TaskInstance> page,
+                                                          Long projectCode,
+                                                          String workflowDefinitionName,
+                                                          String searchVal,
+                                                          String taskName,
+                                                          Long taskCode,
+                                                          String executorName,
+                                                          int[] statusArray,
+                                                          String host,
+                                                          TaskExecuteType taskExecuteType,
+                                                          Date startTime,
+                                                          Date endTime);
 }

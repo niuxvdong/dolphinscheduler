@@ -162,12 +162,25 @@ export function useAliyunServerlessSpark(model: {
     },
 
     {
+      type: 'input',
+      field: 'templateId',
+      name: t('project.node.template_id'),
+      props: {
+        placeholder: t('project.node.template_id_tips')
+      }
+    },
+
+    {
       type: 'switch',
       field: 'isProduction',
       name: t('project.node.is_production'),
       span: 12
     },
 
-    ...useCustomParams({ model, field: 'localParams', isSimple: false })
+    ...useCustomParams({
+      model,
+      field: 'localParams',
+      isSimple: model.readonly
+    })
   ]
 }

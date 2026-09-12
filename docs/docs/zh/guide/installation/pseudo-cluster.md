@@ -33,6 +33,8 @@ dolphinscheduler-task-shell
 --end--
 ```
 
+> **_注意:_** 插件依赖包通常不包含在二进制包中，如果你在启动服务时遇到 `ClassNotFoundException` 错误，请参考相关插件类型的文档检查是否缺少插件依赖包，例如 `dolphinscheduler-datasource-mysql` 中不包含 `mysql-connector-java.jar`
+
 ## 准备 DolphinScheduler 启动环境
 
 > **_注意:_** DolphinScheduler 本身不依赖 Hadoop、Hive、Spark，但如果你运行的任务需要依赖他们，就需要有对应的环境支持
@@ -49,7 +51,7 @@ useradd dolphinscheduler
 echo "dolphinscheduler" | passwd --stdin dolphinscheduler
 
 # 配置 sudo 免密
-sed -i '$adolphinscheduler  ALL=(ALL)  NOPASSWD: NOPASSWD: ALL' /etc/sudoers
+sed -i '$dolphinscheduler  ALL=(ALL)  NOPASSWD: ALL' /etc/sudoers
 sed -i 's/Defaults    requiretty/#Defaults    requiretty/g' /etc/sudoers
 
 # 修改目录权限，使得部署用户对二进制包解压后的 apache-dolphinscheduler-*-bin 目录有操作权限

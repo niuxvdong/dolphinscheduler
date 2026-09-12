@@ -3,7 +3,7 @@
 ## Overview
 
 Use `Dinky Task` to create a dinky-type task and support one-stop development, debugging, operation and maintenance of FlinkSql, Flink jar and SQL. When the worker executes `Dinky Task`,
-it will call `Dinky API` to trigger dinky task. Click [here](http://www.dlink.top/) for details about `Dinky`.
+it will call `Dinky API` to trigger dinky task. Click [here](https://www.dinky.org.cn/) for details about `Dinky`.
 
 ## Create Task
 
@@ -11,9 +11,6 @@ it will call `Dinky API` to trigger dinky task. Click [here](http://www.dlink.to
 - Drag <img src="../../../../img/tasks/icons/dinky.png" width="15"/> from the toolbar to the canvas.
 
 ## Task Parameter
-
-[//]: # (TODO: use the commented anchor below once our website template supports this syntax)
-[//]: # (- Please refer to [DolphinScheduler Task Parameters Appendix]&#40;appendix.md#default-task-parameters&#41; `Default Task Parameters` section for default parameters.)
 
 - Please refer to [DolphinScheduler Task Parameters Appendix](appendix.md) `Default Task Parameters` section for default parameters.
 

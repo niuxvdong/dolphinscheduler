@@ -24,10 +24,13 @@ import org.apache.dolphinscheduler.extract.base.client.Clients;
 import org.apache.dolphinscheduler.extract.base.utils.Host;
 import org.apache.dolphinscheduler.extract.worker.IPhysicalTaskExecutorOperator;
 import org.apache.dolphinscheduler.plugin.task.api.TaskExecutionContext;
+import org.apache.dolphinscheduler.server.master.cluster.ClusterManager;
 import org.apache.dolphinscheduler.server.master.cluster.loadbalancer.IWorkerLoadBalancer;
 import org.apache.dolphinscheduler.server.master.config.MasterConfig;
-import org.apache.dolphinscheduler.server.master.engine.task.runnable.ITaskExecutionRunnable;
+import org.apache.dolphinscheduler.server.master.engine.task.execution.ITaskExecution;
+import org.apache.dolphinscheduler.server.master.exception.dispatch.NoAvailableWorkerException;
 import org.apache.dolphinscheduler.server.master.exception.dispatch.TaskDispatchException;
+import org.apache.dolphinscheduler.server.master.exception.dispatch.WorkerGroupNotFoundException;
 import org.apache.dolphinscheduler.task.executor.eventbus.ITaskExecutorLifecycleEventReporter;
 import org.apache.dolphinscheduler.task.executor.operations.TaskExecutorDispatchRequest;
 import org.apache.dolphinscheduler.task.executor.operations.TaskExecutorDispatchResponse;
@@ -55,27 +58,35 @@ public class PhysicalTaskExecutorClientDelegator implements ITaskExecutorClientD
     @Autowired
     private IWorkerLoadBalancer workerLoadBalancer;
 
+    @Autowired
+    private ClusterManager clusterManager;
+
     @Override
-    public void dispatch(final ITaskExecutionRunnable taskExecutionRunnable) throws TaskDispatchException {
-        final TaskExecutionContext taskExecutionContext = taskExecutionRunnable.getTaskExecutionContext();
+    public void dispatch(final ITaskExecution taskExecution) throws TaskDispatchException {
+        final TaskExecutionContext taskExecutionContext = taskExecution.getTaskExecutionContext();
         final String taskName = taskExecutionContext.getTaskName();
+        final String workerGroup = taskExecutionContext.getWorkerGroup();
+
+        // workerGroup not exist
+        if (!clusterManager.getWorkerClusters().containsWorkerGroup(workerGroup)) {
+            throw new WorkerGroupNotFoundException(workerGroup);
+        }
+
+        // select an available worker from the worker group; throws NoAvailableWorkerException if none is available.
         final String physicalTaskExecutorAddress = workerLoadBalancer
-                .select(taskExecutionContext.getWorkerGroup())
+                .select(workerGroup)
                 .map(Host::of)
                 .map(Host::getAddress)
-                .orElseThrow(() -> new TaskDispatchException(
-                        String.format("Cannot find the host to dispatch Task[id=%s, name=%s, workerGroup=%s]",
-                                taskExecutionContext.getTaskInstanceId(), taskName,
-                                taskExecutionContext.getWorkerGroup())));
+                .orElseThrow(() -> new NoAvailableWorkerException(workerGroup));
 
         taskExecutionContext.setHost(physicalTaskExecutorAddress);
-        taskExecutionRunnable.getTaskInstance().setHost(physicalTaskExecutorAddress);
+        taskExecution.getTaskInstance().setHost(physicalTaskExecutorAddress);
 
         try {
             final TaskExecutorDispatchResponse taskExecutorDispatchResponse = Clients
                     .withService(IPhysicalTaskExecutorOperator.class)
                     .withHost(physicalTaskExecutorAddress)
-                    .dispatchTask(TaskExecutorDispatchRequest.of(taskExecutionRunnable.getTaskExecutionContext()));
+                    .dispatchTask(TaskExecutorDispatchRequest.of(taskExecution.getTaskExecutionContext()));
             if (!taskExecutorDispatchResponse.isDispatchSuccess()) {
                 throw new TaskDispatchException(
                         "Dispatch task: " + taskName + " to " + physicalTaskExecutorAddress + " failed: "
@@ -90,12 +101,12 @@ public class PhysicalTaskExecutorClientDelegator implements ITaskExecutorClientD
     }
 
     @Override
-    public boolean reassignMasterHost(final ITaskExecutionRunnable taskExecutionRunnable) {
-        final String taskName = taskExecutionRunnable.getName();
-        checkArgument(taskExecutionRunnable.isTaskInstanceInitialized(),
+    public boolean reassignMasterHost(final ITaskExecution taskExecution) {
+        final String taskName = taskExecution.getName();
+        checkArgument(taskExecution.isTaskInstanceInitialized(),
                 "Task " + taskName + "is not initialized cannot take-over");
 
-        final TaskInstance taskInstance = taskExecutionRunnable.getTaskInstance();
+        final TaskInstance taskInstance = taskExecution.getTaskInstance();
         final String taskExecutorHost = taskInstance.getHost();
         if (StringUtils.isEmpty(taskExecutorHost)) {
             log.debug(
@@ -127,8 +138,8 @@ public class PhysicalTaskExecutorClientDelegator implements ITaskExecutorClientD
     }
 
     @Override
-    public void pause(final ITaskExecutionRunnable taskExecutionRunnable) {
-        final TaskInstance taskInstance = taskExecutionRunnable.getTaskInstance();
+    public void pause(final ITaskExecution taskExecution) {
+        final TaskInstance taskInstance = taskExecution.getTaskInstance();
         final String executorHost = taskInstance.getHost();
         final String taskName = taskInstance.getName();
         checkArgument(StringUtils.isNotEmpty(executorHost), "Executor host is empty");
@@ -145,8 +156,8 @@ public class PhysicalTaskExecutorClientDelegator implements ITaskExecutorClientD
     }
 
     @Override
-    public void kill(final ITaskExecutionRunnable taskExecutionRunnable) {
-        final TaskInstance taskInstance = taskExecutionRunnable.getTaskInstance();
+    public void kill(final ITaskExecution taskExecution) {
+        final TaskInstance taskInstance = taskExecution.getTaskInstance();
         final String executorHost = taskInstance.getHost();
         final String taskName = taskInstance.getName();
         checkArgument(StringUtils.isNotEmpty(executorHost), "Executor host is empty");
@@ -163,9 +174,9 @@ public class PhysicalTaskExecutorClientDelegator implements ITaskExecutorClientD
     }
 
     @Override
-    public void ackTaskExecutorLifecycleEvent(final ITaskExecutionRunnable taskExecutionRunnable,
+    public void ackTaskExecutorLifecycleEvent(final ITaskExecution taskExecution,
                                               final ITaskExecutorLifecycleEventReporter.TaskExecutorLifecycleEventAck taskExecutorLifecycleEventAck) {
-        final TaskInstance taskInstance = taskExecutionRunnable.getTaskInstance();
+        final TaskInstance taskInstance = taskExecution.getTaskInstance();
         final String executorHost = taskInstance.getHost();
         checkArgument(StringUtils.isNotEmpty(executorHost), "Executor host is empty");
 

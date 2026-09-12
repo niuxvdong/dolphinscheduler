@@ -41,14 +41,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 
-/**
- * datasource mapper test
- */
 public class DataSourceMapperTest extends BaseDaoTest {
 
-    /**
-     * datasource mapper
-     */
     @Autowired
     private DataSourceMapper dataSourceMapper;
 
@@ -195,7 +189,7 @@ public class DataSourceMapperTest extends BaseDaoTest {
         for (DataSource actualDataSource : actualDataSources) {
             DataSource expectedDataSource = expectedDataSourceMap.get(actualDataSource.getId());
             if (expectedDataSource != null) {
-                Assertions.assertEquals(expectedDataSource, actualDataSource);
+                assertDataSourceSimpleInfo(expectedDataSource, actualDataSource);
             }
         }
 
@@ -216,9 +210,19 @@ public class DataSourceMapperTest extends BaseDaoTest {
         for (DataSource actualDataSource : actualDataSources) {
             DataSource expectedDataSource = expectedDataSourceMap.get(actualDataSource.getId());
             if (expectedDataSource != null) {
-                Assertions.assertEquals(expectedDataSource, actualDataSource);
+                assertDataSourceSimpleInfo(expectedDataSource, actualDataSource);
             }
         }
+    }
+
+    private void assertDataSourceSimpleInfo(DataSource expectedDataSource, DataSource actualDataSource) {
+        Assertions.assertEquals(expectedDataSource.getId(), actualDataSource.getId());
+        Assertions.assertEquals(expectedDataSource.getName(), actualDataSource.getName());
+        Assertions.assertNull(actualDataSource.getConnectionParams());
+        Assertions.assertNull(actualDataSource.getNote());
+        Assertions.assertNull(actualDataSource.getType());
+        Assertions.assertNull(actualDataSource.getCreateTime());
+        Assertions.assertNull(actualDataSource.getUpdateTime());
     }
 
     /**

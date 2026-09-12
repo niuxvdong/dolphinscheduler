@@ -31,7 +31,6 @@ import org.apache.commons.lang3.RandomUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.IOException;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
@@ -41,9 +40,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 
-import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.stereotype.Component;
@@ -71,16 +68,11 @@ public class RegistryClient {
         if (!registry.exists(RegistryNodeType.FAILOVER_FINISH_NODES.getRegistryPath())) {
             registry.put(RegistryNodeType.FAILOVER_FINISH_NODES.getRegistryPath(), EMPTY, false);
         }
-        cleanHistoryFailoverFinishedNodes();
     }
 
     public boolean isConnected() {
         return registry.isConnected();
 
-    }
-
-    public void connectUntilTimeout(@NonNull Duration duration) throws RegistryException {
-        registry.connectUntilTimeout(duration);
     }
 
     public List<Server> getServerList(RegistryNodeType registryNodeType) {
@@ -198,15 +190,14 @@ public class RegistryClient {
         return registry.exists(key);
     }
 
-    public boolean getLock(String key) {
+    public RegistryLock getLock(String key) {
         if (!registry.isConnected()) {
             throw new IllegalStateException("The registry is not connected");
         }
-        return registry.acquireLock(key);
-    }
-
-    public boolean releaseLock(String key) {
-        return registry.releaseLock(key);
+        if (!registry.acquireLock(key)) {
+            throw new RegistryException("Failed to acquire registry lock: " + key);
+        }
+        return new RegistryLock(registry, key);
     }
 
     public void setStoppable(IStoppable stoppable) {
@@ -233,26 +224,4 @@ public class RegistryClient {
         return getChildrenKeys(nodeType.getRegistryPath());
     }
 
-    private void cleanHistoryFailoverFinishedNodes() {
-        // Clean the history failover finished nodes
-        // which failover is before the current time minus 1 week
-        final Collection<String> failoverFinishedNodes =
-                registry.children(RegistryNodeType.FAILOVER_FINISH_NODES.getRegistryPath());
-        if (CollectionUtils.isEmpty(failoverFinishedNodes)) {
-            return;
-        }
-        for (final String failoverFinishedNode : failoverFinishedNodes) {
-            try {
-                final String failoverFinishTime = registry.get(failoverFinishedNode);
-                if (System.currentTimeMillis() - Long.parseLong(failoverFinishTime) > TimeUnit.DAYS.toMillis(7)) {
-                    registry.delete(failoverFinishedNode);
-                    log.info(
-                            "Clear the failover finished node: {} which failover time is before the current time minus 1 week",
-                            failoverFinishedNode);
-                }
-            } catch (Exception ex) {
-                log.error("Failed to clean the failoverFinishedNode: {}", failoverFinishedNode, ex);
-            }
-        }
-    }
 }

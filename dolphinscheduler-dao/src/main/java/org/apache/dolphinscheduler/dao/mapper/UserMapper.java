@@ -29,9 +29,6 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 
-/**
- * user mapper interface
- */
 public interface UserMapper extends BaseMapper<User> {
 
     /**
@@ -90,14 +87,6 @@ public interface UserMapper extends BaseMapper<User> {
      * @return user
      */
     User queryDetailsById(@Param("userId") int userId);
-
-    /**
-     * query user list by alertgroupId
-     *
-     * @param alertgroupId alertgroupId
-     * @return user list
-     */
-    List<User> queryUserListByAlertGroupId(@Param("alertgroupId") int alertgroupId);
 
     /**
      * query user list by tenantId

@@ -61,9 +61,6 @@ import io.swagger.v3.oas.annotations.Parameters;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
-/**
- * alert plugin instance controller
- */
 @Tag(name = "ALERT_PLUGIN_INSTANCE_TAG")
 @RestController
 @RequestMapping("alert-plugin-instances")
@@ -109,9 +106,10 @@ public class AlertPluginInstanceController extends BaseController {
     @PostMapping(value = "/test-send")
     @ResponseStatus(HttpStatus.OK)
     @ApiException(SEND_TEST_ALERT_PLUGIN_INSTANCE_ERROR)
-    public Result<Boolean> testSendAlertPluginInstance(@RequestParam(value = "pluginDefineId") int pluginDefineId,
+    public Result<Boolean> testSendAlertPluginInstance(@Parameter(hidden = true) @RequestAttribute(value = Constants.SESSION_USER) User loginUser,
+                                                       @RequestParam(value = "pluginDefineId") int pluginDefineId,
                                                        @RequestParam(value = "pluginInstanceParams") String pluginInstanceParams) {
-        alertPluginInstanceService.testSend(pluginDefineId, pluginInstanceParams);
+        alertPluginInstanceService.testSend(loginUser, pluginDefineId, pluginInstanceParams);
         return Result.success(true);
     }
 
@@ -193,7 +191,7 @@ public class AlertPluginInstanceController extends BaseController {
     @ResponseStatus(HttpStatus.OK)
     @ApiException(QUERY_ALL_ALERT_PLUGIN_INSTANCE_ERROR)
     public Result<List<AlertPluginInstanceVO>> getAlertPluginInstance(@Parameter(hidden = true) @RequestAttribute(value = Constants.SESSION_USER) User loginUser) {
-        List<AlertPluginInstanceVO> alertPluginInstanceVOS = alertPluginInstanceService.queryAll();
+        List<AlertPluginInstanceVO> alertPluginInstanceVOS = alertPluginInstanceService.queryAll(loginUser);
         return Result.success(alertPluginInstanceVOS);
     }
 
@@ -213,7 +211,7 @@ public class AlertPluginInstanceController extends BaseController {
     public Result verifyGroupName(@Parameter(hidden = true) @RequestAttribute(value = Constants.SESSION_USER) User loginUser,
                                   @RequestParam(value = "alertInstanceName") String alertInstanceName) {
 
-        boolean exist = alertPluginInstanceService.checkExistPluginInstanceName(alertInstanceName);
+        boolean exist = alertPluginInstanceService.checkExistPluginInstanceName(loginUser, alertInstanceName);
         if (exist) {
             log.error("alert plugin instance {} has exist, can't create again.", alertInstanceName);
             return Result.error(Status.PLUGIN_INSTANCE_ALREADY_EXISTS);

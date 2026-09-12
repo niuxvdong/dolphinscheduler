@@ -24,6 +24,7 @@ import org.apache.dolphinscheduler.common.utils.JSONUtils;
 import org.apache.dolphinscheduler.dao.entity.DataSource;
 import org.apache.dolphinscheduler.dao.entity.Environment;
 import org.apache.dolphinscheduler.dao.entity.Project;
+import org.apache.dolphinscheduler.dao.entity.TaskDefinition;
 import org.apache.dolphinscheduler.dao.entity.TaskInstance;
 import org.apache.dolphinscheduler.dao.entity.WorkflowDefinition;
 import org.apache.dolphinscheduler.dao.entity.WorkflowInstance;
@@ -39,17 +40,23 @@ import org.apache.dolphinscheduler.plugin.task.api.parameters.resource.AbstractR
 import org.apache.dolphinscheduler.plugin.task.api.parameters.resource.DataSourceParameters;
 import org.apache.dolphinscheduler.plugin.task.api.parameters.resource.ResourceParametersHelper;
 import org.apache.dolphinscheduler.plugin.task.api.utils.MapUtils;
+import org.apache.dolphinscheduler.plugin.task.api.utils.VarPoolUtils;
 import org.apache.dolphinscheduler.server.master.config.MasterConfig;
-import org.apache.dolphinscheduler.server.master.engine.task.runnable.TaskExecutionContextBuilder;
-import org.apache.dolphinscheduler.server.master.engine.task.runnable.TaskExecutionContextCreateRequest;
+import org.apache.dolphinscheduler.server.master.engine.graph.IWorkflowExecutionGraph;
+import org.apache.dolphinscheduler.server.master.engine.task.execution.ITaskExecution;
+import org.apache.dolphinscheduler.server.master.engine.task.execution.TaskExecutionContextBuilder;
+import org.apache.dolphinscheduler.server.master.engine.task.execution.TaskExecutionContextCreateRequest;
 import org.apache.dolphinscheduler.service.expand.CuringParamsService;
 import org.apache.dolphinscheduler.service.process.ProcessService;
 
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -78,6 +85,11 @@ public class TaskExecutionContextFactory {
         final WorkflowDefinition workflowDefinition = request.getWorkflowDefinition();
         final Project project = request.getProject();
 
+        final List<Property> varPools =
+                generateTaskInstanceVarPool(workflowInstance, request.getTaskDefinition(),
+                        request.getWorkflowExecutionGraph());
+        taskInstance.setVarPool(VarPoolUtils.serializeVarPool(varPools));
+
         return TaskExecutionContextBuilder.get()
                 .buildWorkflowInstanceHost(masterConfig.getMasterAddress())
                 .buildTaskInstanceRelatedInfo(taskInstance)
@@ -85,7 +97,7 @@ public class TaskExecutionContextFactory {
                 .buildTaskDefinitionRelatedInfo(request.getTaskDefinition())
                 .buildProcessInstanceRelatedInfo(request.getWorkflowInstance())
                 .buildResourceParameters(getResourceParameters(taskInstance))
-                .buildBusinessParams(getBusinessParams(workflowInstance))
+                // todo: use TaskRuntimeParameters to replace Map<String, Property> in TaskExecutionContext
                 .buildPrepareParams(getPrepareParams(taskInstance, workflowInstance, workflowDefinition, project))
                 .buildK8sTaskRelatedInfo(getK8sTaskExecutionContext(taskInstance))
                 .create();
@@ -152,10 +164,6 @@ public class TaskExecutionContextFactory {
         return k8sTaskExecutionContext;
     }
 
-    private Map<String, Property> getBusinessParams(final WorkflowInstance workflowInstance) {
-        return curingParamsService.preBuildBusinessParams(workflowInstance);
-    }
-
     private Map<String, Property> getPrepareParams(final TaskInstance taskInstance,
                                                    final WorkflowInstance workflowInstance,
                                                    final WorkflowDefinition workflowDefinition,
@@ -182,6 +190,30 @@ public class TaskExecutionContextFactory {
             throw new IllegalArgumentException("Cannot find the environment: " + taskInstance.getEnvironmentCode());
         }
         return Optional.ofNullable(environmentOptional.get().getConfig());
+    }
+
+    // The predecessors of the task instance will be used to generate the var pool.
+    // In execute-task(TASK_ONLY) scenario, the predecessor might be outside current execution sub-graph.
+    // For this case, fallback to workflow varPool to keep compatibility with historical behavior.
+    private List<Property> generateTaskInstanceVarPool(WorkflowInstance workflowInstance,
+                                                       TaskDefinition taskDefinition,
+                                                       IWorkflowExecutionGraph workflowExecutionGraph) {
+        final boolean isStartNode = workflowExecutionGraph.getStartNodes()
+                .stream()
+                .anyMatch(node -> node.getTaskDefinition().getCode() == taskDefinition.getCode());
+        if (isStartNode) {
+            return VarPoolUtils.deserializeVarPool(workflowInstance.getVarPool());
+        }
+
+        List<String> varPoolsFromPredecessors = workflowExecutionGraph.getPredecessors(taskDefinition.getName())
+                .stream()
+                .filter(ITaskExecution::isTaskInstanceInitialized)
+                .map(ITaskExecution::getTaskInstance)
+                .sorted(Comparator.comparing(TaskInstance::getEndTime, Comparator.nullsLast(Comparator.naturalOrder())))
+                .map(TaskInstance::getVarPool)
+                .filter(StringUtils::isNotBlank)
+                .collect(Collectors.toList());
+        return VarPoolUtils.mergeVarPoolJsonString(varPoolsFromPredecessors);
     }
 
 }

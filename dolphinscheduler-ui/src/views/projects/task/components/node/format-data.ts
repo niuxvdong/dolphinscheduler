@@ -26,6 +26,7 @@ import type {
   IDependentParameters
 } from './types'
 import { ref } from 'vue'
+import * as proto from 'protobufjs'
 
 export function formatParams(data: INodeData): {
   workflowDefinitionCode: string
@@ -89,6 +90,21 @@ export function formatParams(data: INodeData): {
     taskParams.taskManager = data.taskManager
     taskParams.parallelism = data.parallelism
   }
+  if (data.taskType === 'GRPC') {
+    taskParams.url = data.url
+    taskParams.grpcCredentialType = data.grpcCredentialType
+    taskParams.grpcServiceDefinition = data.grpcServiceDefinition
+    const root = proto.parse(data.grpcServiceDefinition || '').root
+    const grpcServiceDefinitionJSON = JSON.stringify(root.toJSON()) || '{}'
+    taskParams.grpcServiceDefinitionJSON = grpcServiceDefinitionJSON
+    taskParams.methodName = data.methodName
+    taskParams.message = data.message
+    taskParams.grpcCheckCondition = data.grpcCheckCondition
+    taskParams.condition = data.condition
+    taskParams.grpcConnectTimeoutMs = data.grpcConnectTimeoutMs
+    taskParams.socketTimeout = data.socketTimeout
+  }
+
   if (data.taskType === 'HTTP') {
     taskParams.httpMethod = data.httpMethod
     taskParams.httpBody = data.httpBody
@@ -189,6 +205,8 @@ export function formatParams(data: INodeData): {
     taskParams.type = data.type
     taskParams.datasource = data.datasource
     taskParams.sql = data.sql
+    taskParams.sqlSource = data.sqlSource
+    taskParams.sqlResource = data.sqlResource
     taskParams.sqlType = data.sqlType
     taskParams.preStatements = data.preStatements
     taskParams.postStatements = data.postStatements
@@ -258,6 +276,7 @@ export function formatParams(data: INodeData): {
       taskParams.targetTable = data.targetTable
       taskParams.jobSpeedByte = data.jobSpeedByte
       taskParams.jobSpeedRecord = data.jobSpeedRecord
+      taskParams.jobChannel = data.jobChannel
       taskParams.preStatements = data.preStatements
       taskParams.postStatements = data.postStatements
     } else {
@@ -287,6 +306,13 @@ export function formatParams(data: INodeData): {
     taskParams.stepsDefineJson = data.stepsDefineJson
   }
 
+  if (data.taskType === 'EMR_SERVERLESS') {
+    taskParams.applicationId = data.applicationId
+    taskParams.executionRoleArn = data.executionRoleArn
+    taskParams.jobName = data.jobName
+    taskParams.startJobRunRequestJson = data.startJobRunRequestJson
+  }
+
   if (data.taskType === 'ZEPPELIN') {
     taskParams.noteId = data.noteId
     taskParams.paragraphId = data.paragraphId
@@ -305,6 +331,7 @@ export function formatParams(data: INodeData): {
     taskParams.codeType = data.codeType
     taskParams.jobName = data.jobName
     taskParams.engineReleaseVersion = data.engineReleaseVersion
+    taskParams.templateId = data.templateId
     taskParams.entryPoint = data.entryPoint
     taskParams.entryPointArguments = data.entryPointArguments
     taskParams.sparkSubmitParameters = data.sparkSubmitParameters
@@ -377,16 +404,6 @@ export function formatParams(data: INodeData): {
     taskParams.datasource = data.datasource
     taskParams.type = data.type
     taskParams.awsRegion = data.awsRegion
-  }
-  if (data.taskType === 'PYTORCH') {
-    taskParams.script = data.script
-    taskParams.scriptParams = data.scriptParams
-    taskParams.pythonPath = data.pythonPath
-    taskParams.isCreateEnvironment = data.isCreateEnvironment
-    taskParams.pythonLauncher = data.pythonLauncher
-    taskParams.pythonEnvTool = data.pythonEnvTool
-    taskParams.requirements = data.requirements
-    taskParams.condaPythonVersion = data.condaPythonVersion
   }
 
   if (data.taskType === 'DINKY') {

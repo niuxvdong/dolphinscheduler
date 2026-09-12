@@ -20,6 +20,8 @@ package org.apache.dolphinscheduler.server.master.engine.workflow.statemachine;
 import org.apache.dolphinscheduler.common.enums.WorkflowExecutionStatus;
 import org.apache.dolphinscheduler.server.master.engine.WorkflowEventBus;
 import org.apache.dolphinscheduler.server.master.engine.graph.IWorkflowExecutionGraph;
+import org.apache.dolphinscheduler.server.master.engine.task.execution.ITaskExecution;
+import org.apache.dolphinscheduler.server.master.engine.workflow.execution.IWorkflowExecution;
 import org.apache.dolphinscheduler.server.master.engine.workflow.lifecycle.event.WorkflowFailedLifecycleEvent;
 import org.apache.dolphinscheduler.server.master.engine.workflow.lifecycle.event.WorkflowFinalizeLifecycleEvent;
 import org.apache.dolphinscheduler.server.master.engine.workflow.lifecycle.event.WorkflowPauseLifecycleEvent;
@@ -29,7 +31,8 @@ import org.apache.dolphinscheduler.server.master.engine.workflow.lifecycle.event
 import org.apache.dolphinscheduler.server.master.engine.workflow.lifecycle.event.WorkflowStoppedLifecycleEvent;
 import org.apache.dolphinscheduler.server.master.engine.workflow.lifecycle.event.WorkflowSucceedLifecycleEvent;
 import org.apache.dolphinscheduler.server.master.engine.workflow.lifecycle.event.WorkflowTopologyLogicalTransitionWithTaskFinishLifecycleEvent;
-import org.apache.dolphinscheduler.server.master.engine.workflow.runnable.IWorkflowExecutionRunnable;
+
+import java.util.List;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -40,69 +43,77 @@ import org.springframework.stereotype.Component;
 public class WorkflowReadyStopStateAction extends AbstractWorkflowStateAction {
 
     @Override
-    public void startEventAction(final IWorkflowExecutionRunnable workflowExecutionRunnable,
-                                 final WorkflowStartLifecycleEvent workflowStartEvent) {
-        throwExceptionIfStateIsNotMatch(workflowExecutionRunnable);
+    public void onStartEvent(final IWorkflowExecution workflowExecution,
+                             final WorkflowStartLifecycleEvent workflowStartEvent) {
+        throwExceptionIfStateIsNotMatch(workflowExecution);
         final IWorkflowExecutionGraph workflowExecutionGraph =
-                workflowExecutionRunnable.getWorkflowExecuteContext().getWorkflowExecutionGraph();
-        triggerTasks(workflowExecutionRunnable, workflowExecutionGraph.getStartNodes());
+                workflowExecution.getWorkflowExecuteContext().getWorkflowExecutionGraph();
+        final List<ITaskExecution> startNodes = workflowExecutionGraph.getStartNodes();
+        if (startNodes.isEmpty()) {
+            log.info("Workflow start node is empty, try to emit workflow finished event");
+            emitWorkflowFinishedEventIfApplicable(workflowExecution);
+            return;
+        }
+        triggerTasks(workflowExecution, startNodes);
     }
 
     @Override
-    public void topologyLogicalTransitionEventAction(final IWorkflowExecutionRunnable workflowExecutionRunnable,
-                                                     final WorkflowTopologyLogicalTransitionWithTaskFinishLifecycleEvent workflowTopologyLogicalTransitionWithTaskFinishEvent) {
-        throwExceptionIfStateIsNotMatch(workflowExecutionRunnable);
-        super.tryToTriggerSuccessorsAfterTaskFinish(workflowExecutionRunnable,
-                workflowTopologyLogicalTransitionWithTaskFinishEvent.getTaskExecutionRunnable());
+    public void onTopologyLogicalTransitionEvent(final IWorkflowExecution workflowExecution,
+                                                 final WorkflowTopologyLogicalTransitionWithTaskFinishLifecycleEvent workflowTopologyLogicalTransitionWithTaskFinishEvent) {
+        throwExceptionIfStateIsNotMatch(workflowExecution);
+        final ITaskExecution taskExecution =
+                workflowTopologyLogicalTransitionWithTaskFinishEvent.getTaskExecution();
+        workflowExecution.getWorkflowExecutionGraph().markTaskExecutionInActive(taskExecution);
+        super.tryToTriggerSuccessorsAfterTaskFinish(workflowExecution, taskExecution);
     }
 
     @Override
-    public void pauseEventAction(final IWorkflowExecutionRunnable workflowExecutionRunnable,
-                                 final WorkflowPauseLifecycleEvent workflowPauseEvent) {
-        throwExceptionIfStateIsNotMatch(workflowExecutionRunnable);
-        logWarningIfCannotDoAction(workflowExecutionRunnable, workflowPauseEvent);
+    public void onPauseEvent(final IWorkflowExecution workflowExecution,
+                             final WorkflowPauseLifecycleEvent workflowPauseEvent) {
+        throwExceptionIfStateIsNotMatch(workflowExecution);
+        logWarningIfCannotDoAction(workflowExecution, workflowPauseEvent);
     }
 
     @Override
-    public void pausedEventAction(final IWorkflowExecutionRunnable workflowExecutionRunnable,
-                                  final WorkflowPausedLifecycleEvent workflowPausedEvent) {
-        throwExceptionIfStateIsNotMatch(workflowExecutionRunnable);
-        logWarningIfCannotDoAction(workflowExecutionRunnable, workflowPausedEvent);
+    public void onPausedEvent(final IWorkflowExecution workflowExecution,
+                              final WorkflowPausedLifecycleEvent workflowPausedEvent) {
+        throwExceptionIfStateIsNotMatch(workflowExecution);
+        logWarningIfCannotDoAction(workflowExecution, workflowPausedEvent);
     }
 
     @Override
-    public void stopEventAction(final IWorkflowExecutionRunnable workflowExecutionRunnable,
-                                final WorkflowStopLifecycleEvent workflowStopEvent) {
-        throwExceptionIfStateIsNotMatch(workflowExecutionRunnable);
-        super.killActiveTask(workflowExecutionRunnable);
+    public void onStopEvent(final IWorkflowExecution workflowExecution,
+                            final WorkflowStopLifecycleEvent workflowStopEvent) {
+        throwExceptionIfStateIsNotMatch(workflowExecution);
+        workflowExecution.killActiveTasks();
     }
 
     @Override
-    public void stoppedEventAction(final IWorkflowExecutionRunnable workflowExecutionRunnable,
-                                   final WorkflowStoppedLifecycleEvent workflowStoppedEvent) {
-        throwExceptionIfStateIsNotMatch(workflowExecutionRunnable);
-        super.workflowFinish(workflowExecutionRunnable, WorkflowExecutionStatus.STOP);
+    public void onStoppedEvent(final IWorkflowExecution workflowExecution,
+                               final WorkflowStoppedLifecycleEvent workflowStoppedEvent) {
+        throwExceptionIfStateIsNotMatch(workflowExecution);
+        super.workflowFinish(workflowExecution, WorkflowExecutionStatus.STOP);
     }
 
     @Override
-    public void succeedEventAction(final IWorkflowExecutionRunnable workflowExecutionRunnable,
-                                   final WorkflowSucceedLifecycleEvent workflowSucceedEvent) {
-        throwExceptionIfStateIsNotMatch(workflowExecutionRunnable);
-        super.workflowFinish(workflowExecutionRunnable, WorkflowExecutionStatus.SUCCESS);
+    public void onSucceedEvent(final IWorkflowExecution workflowExecution,
+                               final WorkflowSucceedLifecycleEvent workflowSucceedEvent) {
+        throwExceptionIfStateIsNotMatch(workflowExecution);
+        super.workflowFinish(workflowExecution, WorkflowExecutionStatus.SUCCESS);
     }
 
     @Override
-    public void failedEventAction(final IWorkflowExecutionRunnable workflowExecutionRunnable,
-                                  final WorkflowFailedLifecycleEvent workflowFailedEvent) {
-        throwExceptionIfStateIsNotMatch(workflowExecutionRunnable);
-        super.workflowFinish(workflowExecutionRunnable, WorkflowExecutionStatus.FAILURE);
+    public void onFailedEvent(final IWorkflowExecution workflowExecution,
+                              final WorkflowFailedLifecycleEvent workflowFailedEvent) {
+        throwExceptionIfStateIsNotMatch(workflowExecution);
+        super.workflowFinish(workflowExecution, WorkflowExecutionStatus.FAILURE);
     }
 
     @Override
-    public void finalizeEventAction(final IWorkflowExecutionRunnable workflowExecutionRunnable,
-                                    final WorkflowFinalizeLifecycleEvent workflowFinalizeEvent) {
-        throwExceptionIfStateIsNotMatch(workflowExecutionRunnable);
-        logWarningIfCannotDoAction(workflowExecutionRunnable, workflowFinalizeEvent);
+    public void onFinalizeEvent(final IWorkflowExecution workflowExecution,
+                                final WorkflowFinalizeLifecycleEvent workflowFinalizeEvent) {
+        throwExceptionIfStateIsNotMatch(workflowExecution);
+        logWarningIfCannotDoAction(workflowExecution, workflowFinalizeEvent);
     }
 
     @Override
@@ -111,33 +122,33 @@ public class WorkflowReadyStopStateAction extends AbstractWorkflowStateAction {
     }
 
     @Override
-    protected void emitWorkflowFinishedEventIfApplicable(final IWorkflowExecutionRunnable workflowExecutionRunnable) {
-        final IWorkflowExecutionGraph workflowExecutionGraph =
-                workflowExecutionRunnable.getWorkflowExecuteContext().getWorkflowExecutionGraph();
-        if (!workflowExecutionGraph.isAllTaskExecutionRunnableChainFinish()) {
+    protected void emitWorkflowFinishedEventIfApplicable(final IWorkflowExecution workflowExecution) {
+        if (!isWorkflowFinishable(workflowExecution)) {
             log.debug("There exist task which is not finish, don't need to emit workflow finished event");
             return;
         }
 
-        final WorkflowEventBus workflowEventBus = workflowExecutionRunnable.getWorkflowEventBus();
-        if (workflowExecutionGraph.isExistKillTaskExecutionRunnableChain()) {
-            workflowEventBus.publish(WorkflowStoppedLifecycleEvent.of(workflowExecutionRunnable));
+        final IWorkflowExecutionGraph workflowExecutionGraph =
+                workflowExecution.getWorkflowExecuteContext().getWorkflowExecutionGraph();
+        final WorkflowEventBus workflowEventBus = workflowExecution.getWorkflowEventBus();
+        if (workflowExecutionGraph.isExistKilledTaskExecutionChain()) {
+            workflowEventBus.publish(WorkflowStoppedLifecycleEvent.of(workflowExecution));
             return;
         }
 
-        if (workflowExecutionGraph.isExistFailureTaskExecutionRunnableChain()) {
-            workflowEventBus.publish(WorkflowFailedLifecycleEvent.of(workflowExecutionRunnable));
+        if (workflowExecutionGraph.isExistFailureTaskExecutionChain()) {
+            workflowEventBus.publish(WorkflowFailedLifecycleEvent.of(workflowExecution));
             return;
         }
 
-        if (workflowExecutionGraph.isAllTaskExecutionRunnableChainSuccess()) {
-            workflowEventBus.publish(WorkflowSucceedLifecycleEvent.of(workflowExecutionRunnable));
+        if (workflowExecutionGraph.isAllTaskExecutionChainSuccess()) {
+            workflowEventBus.publish(WorkflowSucceedLifecycleEvent.of(workflowExecution));
             return;
         }
 
         throw new IllegalStateException(
-                "The workflow: " + workflowExecutionRunnable.getName() + " state is "
-                        + workflowExecutionRunnable.getState()
+                "The workflow: " + workflowExecution.getName() + " state is "
+                        + workflowExecution.getState()
                         + " can only finish with success/failed/stop but exist task chain which state is not success/failure/kill");
     }
 }

@@ -19,9 +19,16 @@ package org.apache.dolphinscheduler.dao.repository;
 
 import org.apache.dolphinscheduler.common.enums.WorkflowExecutionStatus;
 import org.apache.dolphinscheduler.dao.entity.WorkflowInstance;
+import org.apache.dolphinscheduler.dao.model.WorkflowInstanceStatusCountDto;
+import org.apache.dolphinscheduler.dao.model.WorkflowInstanceSummaryDto;
 import org.apache.dolphinscheduler.plugin.task.api.model.DateInterval;
 
+import java.util.Collection;
+import java.util.Date;
 import java.util.List;
+
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 
 public interface WorkflowInstanceDao extends IDao<WorkflowInstance> {
 
@@ -39,12 +46,7 @@ public interface WorkflowInstanceDao extends IDao<WorkflowInstance> {
                                      WorkflowExecutionStatus originState,
                                      WorkflowExecutionStatus targetState);
 
-    /**
-     * performs an "upsert" operation (update or insert) on a WorkflowInstance object within a new transaction
-     *
-     * @param workflowInstance workflowInstance
-     */
-    void performTransactionalUpsert(WorkflowInstance workflowInstance);
+    void forceUpdateWorkflowInstanceState(Integer id, WorkflowExecutionStatus status);
 
     /**
      * find last scheduler workflow instance in the date interval
@@ -55,7 +57,7 @@ public interface WorkflowInstanceDao extends IDao<WorkflowInstance> {
      * @return workflow instance
      */
     WorkflowInstance queryLastSchedulerWorkflowInterval(Long workflowDefinitionCode, Long taskDefinitionCode,
-                                                        DateInterval dateInterval, int testFlag);
+                                                        DateInterval dateInterval);
 
     /**
      * find last manual workflow instance interval
@@ -65,8 +67,9 @@ public interface WorkflowInstanceDao extends IDao<WorkflowInstance> {
      * @param dateInterval   dateInterval
      * @return workflow instance
      */
-    WorkflowInstance queryLastManualWorkflowInterval(Long definitionCode, Long taskCode, DateInterval dateInterval,
-                                                     int testFlag);
+    WorkflowInstance queryLastManualWorkflowInterval(Long definitionCode, Long taskCode, DateInterval dateInterval);
+
+    WorkflowInstance queryLastRunningWorkflowInterval(Long definitionCode, DateInterval dateInterval);
 
     /**
      * query first schedule workflow instance
@@ -74,7 +77,7 @@ public interface WorkflowInstanceDao extends IDao<WorkflowInstance> {
      * @param definitionCode definitionCode
      * @return workflow instance
      */
-    WorkflowInstance queryFirstScheduleWorkflowInstance(Long definitionCode);
+    WorkflowInstanceSummaryDto queryFirstScheduleWorkflowInstance(Long definitionCode);
 
     /**
      * query first manual workflow instance
@@ -82,18 +85,54 @@ public interface WorkflowInstanceDao extends IDao<WorkflowInstance> {
      * @param definitionCode definitionCode
      * @return workflow instance
      */
-    WorkflowInstance queryFirstStartWorkflowInstance(Long definitionCode);
+    WorkflowInstanceSummaryDto queryFirstStartWorkflowInstance(Long definitionCode);
 
     WorkflowInstance querySubWorkflowInstanceByParentId(Integer workflowInstanceId, Integer taskInstanceId);
 
-    List<WorkflowInstance> queryByWorkflowCodeVersionStatus(Long workflowDefinitionCode,
-                                                            int workflowDefinitionVersion,
-                                                            int[] states);
+    List<WorkflowInstanceSummaryDto> queryByWorkflowCodeVersionStatus(Long workflowDefinitionCode,
+                                                                      int workflowDefinitionVersion,
+                                                                      int[] states);
 
     List<String> queryNeedFailoverMasters();
 
     /**
      * Query the workflow instances under the master that need to be failover.
      */
-    List<WorkflowInstance> queryNeedFailoverWorkflowInstances(String masterAddress);
+    List<WorkflowInstanceSummaryDto> queryNeedFailoverWorkflowInstances(String masterAddress);
+
+    WorkflowInstance queryDetailById(int id);
+
+    List<WorkflowInstanceStatusCountDto> countWorkflowInstanceStateByProjectCodes(Date startTime,
+                                                                                  Date endTime,
+                                                                                  Collection<Long> projectCodes);
+
+    int updateWorkflowInstanceByTenantCode(String originTenantCode, String destTenantCode);
+
+    int updateWorkflowInstanceByWorkerGroupName(String originWorkerGroupName, String destWorkerGroupName);
+
+    List<WorkflowInstanceSummaryDto> queryByTenantCodeAndStatus(String tenantCode, int[] states);
+
+    List<WorkflowInstanceSummaryDto> queryByWorkerGroupNameAndStatus(String workerGroupName, int[] states);
+
+    List<WorkflowInstanceSummaryDto> queryTopNWorkflowInstance(int size,
+                                                               Date startTime,
+                                                               Date endTime,
+                                                               WorkflowExecutionStatus status,
+                                                               long projectCode);
+
+    IPage<WorkflowInstanceSummaryDto> queryWorkflowInstanceListPaging(Page<WorkflowInstanceSummaryDto> page,
+                                                                      Long projectCode,
+                                                                      Long workflowDefinitionCode,
+                                                                      String searchVal,
+                                                                      String executorName,
+                                                                      int[] statusArray,
+                                                                      String host,
+                                                                      Date startTime,
+                                                                      Date endTime);
+
+    List<WorkflowInstanceSummaryDto> queryByWorkflowDefinitionCodeAndStatus(Long workflowDefinitionCode, int[] states);
+
+    List<WorkflowInstanceSummaryDto> queryByWorkflowDefinitionCode(Long workflowDefinitionCode, int size);
+
+    List<WorkflowInstanceSummaryDto> queryByTriggerCode(Long triggerCode);
 }

@@ -290,6 +290,11 @@ export default defineComponent({
       }
     )
 
+    const formModel = computed(() => ({
+      ...startState.startForm,
+      startParamsList: variables.startParamsList
+    }))
+
     return {
       t,
       showTaskDependType,
@@ -302,6 +307,7 @@ export default defineComponent({
       removeStartParams,
       addStartParams,
       updateParamsList,
+      formModel,
       ...toRefs(variables),
       ...toRefs(startState),
       ...toRefs(props),
@@ -319,7 +325,7 @@ export default defineComponent({
         onConfirm={this.handleStart}
         confirmLoading={this.saving}
       >
-        <NForm ref='startFormRef' model={this.startForm} rules={this.rules}>
+        <NForm ref='startFormRef' model={this.formModel} rules={this.rules}>
           <NFormItem
             label={t('project.workflow.workflow_name')}
             path='workflow_name'
@@ -517,21 +523,23 @@ export default defineComponent({
                     />
                   </NFormItem>
                 )}
-                <NFormItem
-                  label={t('project.workflow.order_of_execution')}
-                  path='executionOrder'
-                >
-                  <NRadioGroup v-model:value={this.startForm.executionOrder}>
-                    <NSpace>
-                      <NRadio value={'DESC_ORDER'}>
-                        {t('project.workflow.descending_order')}
-                      </NRadio>
-                      <NRadio value={'ASC_ORDER'}>
-                        {t('project.workflow.ascending_order')}
-                      </NRadio>
-                    </NSpace>
-                  </NRadioGroup>
-                </NFormItem>
+                {this.startForm.runMode === 'RUN_MODE_SERIAL' && (
+                  <NFormItem
+                    label={t('project.workflow.order_of_execution')}
+                    path='executionOrder'
+                  >
+                    <NRadioGroup v-model:value={this.startForm.executionOrder}>
+                      <NSpace>
+                        <NRadio value={'DESC_ORDER'}>
+                          {t('project.workflow.descending_order')}
+                        </NRadio>
+                        <NRadio value={'ASC_ORDER'}>
+                          {t('project.workflow.ascending_order')}
+                        </NRadio>
+                      </NSpace>
+                    </NRadioGroup>
+                  </NFormItem>
+                )}
                 <NFormItem
                   label={t('project.workflow.schedule_date')}
                   path={
@@ -575,13 +583,13 @@ export default defineComponent({
             )}
           <NFormItem
             label={t('project.workflow.startup_parameter')}
-            path='startup_parameter'
+            path='startParamsList'
           >
             <NDynamicInput
               v-model:value={this.startParamsList}
               onCreate={() => {
                 return {
-                  key: '',
+                  prop: '',
                   direct: 'IN',
                   type: 'VARCHAR',
                   value: ''
@@ -652,13 +660,6 @@ export default defineComponent({
               checkedValue={1}
               uncheckedValue={0}
               v-model:value={this.startForm.dryRun}
-            />
-          </NFormItem>
-          <NFormItem label={t('project.workflow.whether_test')} path='testFlag'>
-            <NSwitch
-              checkedValue={1}
-              uncheckedValue={0}
-              v-model:value={this.startForm.testFlag}
             />
           </NFormItem>
         </NForm>

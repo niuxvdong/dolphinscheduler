@@ -24,6 +24,7 @@ import org.apache.dolphinscheduler.dao.BaseDaoTest;
 import org.apache.dolphinscheduler.dao.entity.WorkflowDefinition;
 import org.apache.dolphinscheduler.dao.entity.WorkflowInstance;
 import org.apache.dolphinscheduler.dao.model.WorkflowInstanceStatusCountDto;
+import org.apache.dolphinscheduler.dao.model.WorkflowInstanceSummaryDto;
 import org.apache.dolphinscheduler.plugin.task.api.enums.TaskExecutionStatus;
 
 import java.util.Date;
@@ -79,7 +80,6 @@ public class WorkflowInstanceMapperTest extends BaseDaoTest {
         workflowInstance.setStartTime(start);
         workflowInstance.setEndTime(end);
         workflowInstance.setState(WorkflowExecutionStatus.RUNNING_EXECUTION);
-        workflowInstance.setTestFlag(0);
         workflowInstanceMapper.insert(workflowInstance);
         return workflowInstance;
     }
@@ -146,7 +146,8 @@ public class WorkflowInstanceMapperTest extends BaseDaoTest {
                 TaskExecutionStatus.RUNNING_EXECUTION.getCode(),
                 TaskExecutionStatus.SUCCESS.getCode()};
 
-        List<WorkflowInstance> workflowInstances = workflowInstanceMapper.queryByHostAndStatus(null, stateArray);
+        List<WorkflowInstanceSummaryDto> workflowInstances =
+                workflowInstanceMapper.queryByHostAndStatus(null, stateArray);
 
         workflowInstanceMapper.deleteById(workflowInstance.getId());
         Assertions.assertNotEquals(0, workflowInstances.size());
@@ -179,9 +180,9 @@ public class WorkflowInstanceMapperTest extends BaseDaoTest {
 
         workflowInstanceMapper.updateById(workflowInstance);
 
-        Page<WorkflowInstance> page = new Page(1, 3);
+        Page<WorkflowInstanceSummaryDto> page = new Page(1, 3);
 
-        IPage<WorkflowInstance> processInstanceIPage = workflowInstanceMapper.queryWorkflowInstanceListPaging(
+        IPage<WorkflowInstanceSummaryDto> processInstanceIPage = workflowInstanceMapper.queryWorkflowInstanceListPaging(
                 page,
                 workflowDefinition.getProjectCode(),
                 workflowInstance.getWorkflowDefinitionCode(),
@@ -243,7 +244,7 @@ public class WorkflowInstanceMapperTest extends BaseDaoTest {
         WorkflowInstance workflowInstance = insertOne();
         WorkflowInstance workflowInstance1 = insertOne();
 
-        List<WorkflowInstance> workflowInstances =
+        List<WorkflowInstanceSummaryDto> workflowInstances =
                 workflowInstanceMapper.queryByWorkflowDefinitionCode(workflowInstance.getWorkflowDefinitionCode(), 1);
         Assertions.assertEquals(1, workflowInstances.size());
 
@@ -267,8 +268,7 @@ public class WorkflowInstanceMapperTest extends BaseDaoTest {
         WorkflowInstance workflowInstance1 =
                 workflowInstanceMapper.queryLastSchedulerWorkflow(workflowInstance.getWorkflowDefinitionCode(), 0L,
                         null,
-                        null,
-                        workflowInstance.getTestFlag());
+                        null);
         Assertions.assertNotEquals(null, workflowInstance1);
         workflowInstanceMapper.deleteById(workflowInstance.getId());
     }
@@ -286,16 +286,14 @@ public class WorkflowInstanceMapperTest extends BaseDaoTest {
         WorkflowInstance workflowInstance1 =
                 workflowInstanceMapper.queryLastManualWorkflow(workflowInstance.getWorkflowDefinitionCode(), null,
                         start,
-                        end,
-                        workflowInstance.getTestFlag());
+                        end);
         Assertions.assertEquals(workflowInstance1.getId(), workflowInstance.getId());
 
         start = new Date(2019 - 1900, 1 - 1, 01, 1, 0, 0);
         workflowInstance1 =
                 workflowInstanceMapper.queryLastManualWorkflow(workflowInstance.getWorkflowDefinitionCode(), null,
                         start,
-                        end,
-                        workflowInstance.getTestFlag());
+                        end);
         Assertions.assertNull(workflowInstance1);
 
         workflowInstanceMapper.deleteById(workflowInstance.getId());
@@ -305,7 +303,7 @@ public class WorkflowInstanceMapperTest extends BaseDaoTest {
     /**
      * test whether it is in descending order by running duration
      */
-    private boolean isSortedByDuration(List<WorkflowInstance> workflowInstances) {
+    private boolean isSortedByDuration(List<WorkflowInstanceSummaryDto> workflowInstances) {
         for (int i = 1; i < workflowInstances.size(); i++) {
             long d1 =
                     workflowInstances.get(i).getEndTime().getTime() - workflowInstances.get(i).getStartTime().getTime();
@@ -334,11 +332,11 @@ public class WorkflowInstanceMapperTest extends BaseDaoTest {
         WorkflowInstance workflowInstance3 = insertOne(startTime3, endTime3);
         Date start = new Date(2020, 1, 1, 1, 1, 1);
         Date end = new Date(2021, 1, 1, 1, 1, 1);
-        List<WorkflowInstance> workflowInstances =
+        List<WorkflowInstanceSummaryDto> workflowInstances =
                 workflowInstanceMapper.queryTopNWorkflowInstance(2, start, end, WorkflowExecutionStatus.SUCCESS, 0L);
         Assertions.assertEquals(2, workflowInstances.size());
         Assertions.assertTrue(isSortedByDuration(workflowInstances));
-        for (WorkflowInstance workflowInstance : workflowInstances) {
+        for (WorkflowInstanceSummaryDto workflowInstance : workflowInstances) {
             Assertions.assertTrue(workflowInstance.getState().isSuccess());
         }
         workflowInstanceMapper.deleteById(workflowInstance1.getId());

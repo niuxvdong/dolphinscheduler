@@ -30,7 +30,7 @@ import org.apache.dolphinscheduler.common.enums.AuthorizationType;
 import org.apache.dolphinscheduler.common.enums.UserType;
 import org.apache.dolphinscheduler.dao.entity.AlertGroup;
 import org.apache.dolphinscheduler.dao.entity.User;
-import org.apache.dolphinscheduler.dao.mapper.AlertGroupMapper;
+import org.apache.dolphinscheduler.dao.repository.AlertGroupDao;
 
 import org.apache.commons.lang3.StringUtils;
 
@@ -52,15 +52,12 @@ import org.springframework.transaction.annotation.Transactional;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 
-/**
- * alert group service impl
- */
 @Service
 @Slf4j
 public class AlertGroupServiceImpl extends BaseServiceImpl implements AlertGroupService {
 
     @Autowired
-    private AlertGroupMapper alertGroupMapper;
+    private AlertGroupDao alertGroupDao;
 
     /**
      * query alert group list
@@ -71,14 +68,14 @@ public class AlertGroupServiceImpl extends BaseServiceImpl implements AlertGroup
     @Override
     public List<AlertGroup> queryAllAlertGroup(User loginUser) {
         if (loginUser.getUserType().equals(UserType.ADMIN_USER)) {
-            return alertGroupMapper.queryAllGroupList();
+            return alertGroupDao.queryAllGroupList();
         }
         Set<Integer> ids = resourcePermissionCheckService.userOwnedResourceIdsAcquisition(AuthorizationType.ALERT_GROUP,
                 loginUser.getId(), log);
         if (ids.isEmpty()) {
             return Collections.emptyList();
         }
-        return alertGroupMapper.selectBatchIds(ids);
+        return alertGroupDao.queryByIds(ids);
     }
 
     /**
@@ -96,7 +93,7 @@ public class AlertGroupServiceImpl extends BaseServiceImpl implements AlertGroup
             throw new ServiceException(Status.USER_NO_OPERATION_PERM);
         }
         // check if exist
-        AlertGroup alertGroup = alertGroupMapper.selectById(id);
+        AlertGroup alertGroup = alertGroupDao.queryById(id);
         if (alertGroup == null) {
             throw new ServiceException(Status.ALERT_GROUP_NOT_EXIST, id);
         }
@@ -116,7 +113,7 @@ public class AlertGroupServiceImpl extends BaseServiceImpl implements AlertGroup
     public PageInfo<AlertGroup> listPaging(User loginUser, String searchVal, Integer pageNo, Integer pageSize) {
         Page<AlertGroup> page = new Page<>(pageNo, pageSize);
         if (loginUser.getUserType().equals(UserType.ADMIN_USER)) {
-            IPage<AlertGroup> alertGroupIPage = alertGroupMapper.queryAlertGroupPage(page, searchVal);
+            IPage<AlertGroup> alertGroupIPage = alertGroupDao.queryAlertGroupPage(page, searchVal);
             return PageInfo.of(alertGroupIPage);
         }
 
@@ -127,7 +124,7 @@ public class AlertGroupServiceImpl extends BaseServiceImpl implements AlertGroup
         }
 
         IPage<AlertGroup> alertGroupIPage =
-                alertGroupMapper.queryAlertGroupPageByIds(page, new ArrayList<>(ids), searchVal);
+                alertGroupDao.queryAlertGroupPageByIds(page, new ArrayList<>(ids), searchVal);
         return PageInfo.of(alertGroupIPage);
     }
 
@@ -164,7 +161,7 @@ public class AlertGroupServiceImpl extends BaseServiceImpl implements AlertGroup
 
         // insert
         try {
-            int insert = alertGroupMapper.insert(alertGroup);
+            int insert = alertGroupDao.insert(alertGroup);
             if (insert > 0) {
                 log.info("Create alert group complete, groupName:{}", alertGroup.getGroupName());
                 return alertGroup;
@@ -196,7 +193,7 @@ public class AlertGroupServiceImpl extends BaseServiceImpl implements AlertGroup
         if (checkDescriptionLength(desc)) {
             throw new ServiceException(Status.DESCRIPTION_TOO_LONG_ERROR);
         }
-        AlertGroup alertGroup = alertGroupMapper.selectById(id);
+        AlertGroup alertGroup = alertGroupDao.queryById(id);
 
         if (alertGroup == null) {
             throw new ServiceException(Status.ALERT_GROUP_NOT_EXIST);
@@ -212,7 +209,7 @@ public class AlertGroupServiceImpl extends BaseServiceImpl implements AlertGroup
         alertGroup.setCreateUserId(loginUser.getId());
         alertGroup.setAlertInstanceIds(alertInstanceIds);
         try {
-            alertGroupMapper.updateById(alertGroup);
+            alertGroupDao.updateById(alertGroup);
             log.info("Update alert group complete, groupName:{}", alertGroup.getGroupName());
             return alertGroup;
         } catch (DuplicateKeyException ex) {
@@ -243,12 +240,12 @@ public class AlertGroupServiceImpl extends BaseServiceImpl implements AlertGroup
         }
 
         // check exist
-        AlertGroup alertGroup = alertGroupMapper.selectById(id);
+        AlertGroup alertGroup = alertGroupDao.queryById(id);
         if (alertGroup == null) {
             throw new ServiceException(Status.ALERT_GROUP_NOT_EXIST);
         }
 
-        alertGroupMapper.deleteById(id);
+        alertGroupDao.deleteById(id);
         log.info("Delete alert group complete, groupId:{}", id);
     }
 
@@ -260,6 +257,6 @@ public class AlertGroupServiceImpl extends BaseServiceImpl implements AlertGroup
      */
     @Override
     public boolean existGroupName(String groupName) {
-        return alertGroupMapper.existGroupName(groupName) == Boolean.TRUE;
+        return alertGroupDao.existGroupName(groupName);
     }
 }

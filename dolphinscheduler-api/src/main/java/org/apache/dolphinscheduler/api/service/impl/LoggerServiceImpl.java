@@ -22,6 +22,7 @@ import static org.apache.dolphinscheduler.api.constants.ApiFuncIdentificationCon
 
 import org.apache.dolphinscheduler.api.enums.Status;
 import org.apache.dolphinscheduler.api.exceptions.ServiceException;
+import org.apache.dolphinscheduler.api.executor.logging.LogClientDelegate;
 import org.apache.dolphinscheduler.api.service.LoggerService;
 import org.apache.dolphinscheduler.api.service.ProjectService;
 import org.apache.dolphinscheduler.api.utils.Result;
@@ -31,15 +32,9 @@ import org.apache.dolphinscheduler.dao.entity.ResponseTaskLog;
 import org.apache.dolphinscheduler.dao.entity.TaskDefinition;
 import org.apache.dolphinscheduler.dao.entity.TaskInstance;
 import org.apache.dolphinscheduler.dao.entity.User;
-import org.apache.dolphinscheduler.dao.mapper.ProjectMapper;
-import org.apache.dolphinscheduler.dao.mapper.TaskDefinitionMapper;
+import org.apache.dolphinscheduler.dao.repository.ProjectDao;
+import org.apache.dolphinscheduler.dao.repository.TaskDefinitionDao;
 import org.apache.dolphinscheduler.dao.repository.TaskInstanceDao;
-import org.apache.dolphinscheduler.extract.base.client.Clients;
-import org.apache.dolphinscheduler.extract.common.ILogService;
-import org.apache.dolphinscheduler.extract.common.transportor.TaskInstanceLogFileDownloadRequest;
-import org.apache.dolphinscheduler.extract.common.transportor.TaskInstanceLogFileDownloadResponse;
-import org.apache.dolphinscheduler.extract.common.transportor.TaskInstanceLogPageQueryRequest;
-import org.apache.dolphinscheduler.extract.common.transportor.TaskInstanceLogPageQueryResponse;
 
 import org.apache.commons.lang3.StringUtils;
 
@@ -52,9 +47,6 @@ import org.springframework.stereotype.Service;
 
 import com.google.common.primitives.Bytes;
 
-/**
- * logger service impl
- */
 @Service
 @Slf4j
 public class LoggerServiceImpl extends BaseServiceImpl implements LoggerService {
@@ -65,13 +57,16 @@ public class LoggerServiceImpl extends BaseServiceImpl implements LoggerService 
     private TaskInstanceDao taskInstanceDao;
 
     @Autowired
-    private ProjectMapper projectMapper;
+    private ProjectDao projectDao;
 
     @Autowired
     private ProjectService projectService;
 
     @Autowired
-    private TaskDefinitionMapper taskDefinitionMapper;
+    private TaskDefinitionDao taskDefinitionDao;
+
+    @Autowired
+    private LogClientDelegate logClientDelegate;
 
     /**
      * view log
@@ -117,7 +112,7 @@ public class LoggerServiceImpl extends BaseServiceImpl implements LoggerService 
         if (taskInstance == null || StringUtils.isBlank(taskInstance.getHost())) {
             throw new ServiceException("task instance is null or host is null");
         }
-        Project project = projectMapper.queryProjectByTaskInstanceId(taskInstId);
+        Project project = projectDao.queryProjectByTaskInstanceId(taskInstId);
         projectService.checkProjectAndAuthThrowException(loginUser, project, DOWNLOAD_LOG);
         return getLogBytes(taskInstance);
     }
@@ -143,7 +138,7 @@ public class LoggerServiceImpl extends BaseServiceImpl implements LoggerService 
             throw new ServiceException(Status.TASK_INSTANCE_NOT_FOUND);
         }
 
-        TaskDefinition taskDefinition = taskDefinitionMapper.queryByCode(task.getTaskCode());
+        TaskDefinition taskDefinition = taskDefinitionDao.queryByCode(task.getTaskCode());
         if (taskDefinition != null && projectCode != taskDefinition.getProjectCode()) {
             throw new ServiceException(Status.TASK_INSTANCE_NOT_FOUND, taskInstId);
         }
@@ -169,7 +164,7 @@ public class LoggerServiceImpl extends BaseServiceImpl implements LoggerService 
             throw new ServiceException("task instance is null or host is null");
         }
 
-        TaskDefinition taskDefinition = taskDefinitionMapper.queryByCode(task.getTaskCode());
+        TaskDefinition taskDefinition = taskDefinitionDao.queryByCode(task.getTaskCode());
         if (taskDefinition != null && projectCode != taskDefinition.getProjectCode()) {
             throw new ServiceException("task instance does not exist in project");
         }
@@ -203,17 +198,7 @@ public class LoggerServiceImpl extends BaseServiceImpl implements LoggerService 
         }
 
         try {
-            TaskInstanceLogPageQueryRequest request = TaskInstanceLogPageQueryRequest.builder()
-                    .taskInstanceId(taskInstance.getId())
-                    .taskInstanceLogAbsolutePath(logPath)
-                    .skipLineNum(skipLineNum)
-                    .limit(limit)
-                    .build();
-            final TaskInstanceLogPageQueryResponse response = Clients
-                    .withService(ILogService.class)
-                    .withHost(taskInstance.getHost())
-                    .pageQueryTaskInstanceLog(request);
-            String logContent = response.getLogContent();
+            String logContent = logClientDelegate.getPartLogString(taskInstance, skipLineNum, limit);
             if (logContent != null) {
                 sb.append(logContent);
             }
@@ -241,14 +226,7 @@ public class LoggerServiceImpl extends BaseServiceImpl implements LoggerService 
         byte[] logBytes;
 
         try {
-            final TaskInstanceLogFileDownloadRequest request = new TaskInstanceLogFileDownloadRequest(
-                    taskInstance.getId(),
-                    logPath);
-            final TaskInstanceLogFileDownloadResponse response = Clients
-                    .withService(ILogService.class)
-                    .withHost(taskInstance.getHost())
-                    .getTaskInstanceWholeLogFileBytes(request);
-            logBytes = response.getLogBytes();
+            logBytes = logClientDelegate.getWholeLogBytes(taskInstance);
             return Bytes.concat(head, logBytes);
         } catch (Exception ex) {
             log.error("Download TaskInstance: {} Log Error", taskInstance.getName(), ex);

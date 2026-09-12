@@ -62,44 +62,26 @@ import com.aliyun.oss.model.PutObjectRequest;
 @Slf4j
 public class OssStorageOperator extends AbstractStorageOperator implements Closeable, StorageOperator {
 
-    private String accessKeyId;
-
-    private String accessKeySecret;
+    private static final int MAX_KEYS = 1000;
 
     private String region;
 
     private String bucketName;
 
-    private String endPoint;
-
-    private OssConnection ossConnection;
-
     private OSS ossClient;
 
     public OssStorageOperator(String resourceBaseAbsolutePath) {
         super(resourceBaseAbsolutePath);
+        init();
     }
 
     private void init() {
-        this.accessKeyId = readOssAccessKeyID();
-        this.accessKeySecret = readOssAccessKeySecret();
-        this.endPoint = readOssEndPoint();
+        final String accessKeyId = readOssAccessKeyID();
+        final String accessKeySecret = readOssAccessKeySecret();
+        final String endPoint = readOssEndPoint();
         this.region = readOssRegion();
         this.bucketName = readOssBucketName();
-        this.ossConnection = buildOssConnection();
-        this.ossClient = buildOssClient();
-        ensureBucketSuccessfullyCreated(bucketName);
-    }
-
-    // TODO: change to use the following init method after DS supports Configuration / Connection Center
-    public void init(OssConnection ossConnection) {
-        this.accessKeyId = readOssAccessKeyID();
-        this.accessKeySecret = readOssAccessKeySecret();
-        this.endPoint = readOssEndPoint();
-        this.region = readOssRegion();
-        this.bucketName = readOssBucketName();
-        this.ossConnection = ossConnection;
-        this.ossClient = buildOssClient();
+        this.ossClient = OssClientFactory.buildOssClient(new OssConnection(accessKeyId, accessKeySecret, endPoint));
         ensureBucketSuccessfullyCreated(bucketName);
     }
 
@@ -121,10 +103,6 @@ public class OssStorageOperator extends AbstractStorageOperator implements Close
 
     protected String readOssEndPoint() {
         return PropertyUtils.getString(StorageConstants.ALIBABA_CLOUD_OSS_END_POINT);
-    }
-
-    protected OssConnection buildOssConnection() {
-        return new OssConnection(accessKeyId, accessKeySecret, endPoint);
     }
 
     @Override
@@ -248,22 +226,43 @@ public class OssStorageOperator extends AbstractStorageOperator implements Close
     public List<StorageEntity> listStorageEntity(String resourceAbsolutePath) {
         final String ossResourceAbsolutePath = transformAbsolutePathToOssKey(resourceAbsolutePath);
 
-        ListObjectsV2Request listObjectsV2Request = new ListObjectsV2Request()
-                .withBucketName(bucketName)
-                .withDelimiter("/")
-                .withPrefix(ossResourceAbsolutePath);
-
-        ListObjectsV2Result listObjectsV2Result = ossClient.listObjectsV2(listObjectsV2Request);
         List<StorageEntity> storageEntities = new ArrayList<>();
-        storageEntities.addAll(listObjectsV2Result.getCommonPrefixes()
-                .stream()
-                .map(this::transformCommonPrefixToStorageEntity)
-                .collect(Collectors.toList()));
-        storageEntities.addAll(
-                listObjectsV2Result.getObjectSummaries().stream()
-                        .filter(s3ObjectSummary -> !s3ObjectSummary.getKey().equals(resourceAbsolutePath))
-                        .map(this::transformOSSObjectToStorageEntity)
-                        .collect(Collectors.toList()));
+        Set<String> commonPrefixSet = new HashSet<>();
+        String continuationToken = null;
+        boolean truncated;
+        do {
+            ListObjectsV2Request listObjectsV2Request = new ListObjectsV2Request()
+                    .withBucketName(bucketName)
+                    .withDelimiter("/")
+                    .withPrefix(ossResourceAbsolutePath)
+                    .withMaxKeys(MAX_KEYS);
+            if (continuationToken != null) {
+                listObjectsV2Request.setContinuationToken(continuationToken);
+            }
+
+            ListObjectsV2Result listObjectsV2Result = ossClient.listObjectsV2(listObjectsV2Request);
+
+            for (String commonPrefix : listObjectsV2Result.getCommonPrefixes()) {
+                if (commonPrefixSet.add(commonPrefix)) {
+                    storageEntities.add(transformCommonPrefixToStorageEntity(commonPrefix));
+                }
+            }
+
+            for (OSSObjectSummary ossObjectSummary : listObjectsV2Result.getObjectSummaries()) {
+                // Filter out the current directory itself
+                if (ossObjectSummary.getKey().equals(ossResourceAbsolutePath)) {
+                    continue;
+                }
+                // Filter out directory marker objects that are already in commonPrefixes
+                if (commonPrefixSet.contains(ossObjectSummary.getKey())) {
+                    continue;
+                }
+                storageEntities.add(transformOSSObjectToStorageEntity(ossObjectSummary));
+            }
+
+            truncated = listObjectsV2Result.isTruncated();
+            continuationToken = listObjectsV2Result.getNextContinuationToken();
+        } while (truncated && continuationToken != null);
 
         return storageEntities;
 
@@ -303,7 +302,7 @@ public class OssStorageOperator extends AbstractStorageOperator implements Close
         return transformOSSObjectToStorageEntity(object);
     }
 
-    public void ensureBucketSuccessfullyCreated(String bucketName) {
+    private void ensureBucketSuccessfullyCreated(String bucketName) {
         if (StringUtils.isBlank(bucketName)) {
             throw new IllegalArgumentException("resource.alibaba.cloud.oss.bucket.name is empty");
         }
@@ -316,11 +315,6 @@ public class OssStorageOperator extends AbstractStorageOperator implements Close
 
         log.info("bucketName: {} has been found, the current regionName is {}", bucketName, region);
     }
-
-    protected OSS buildOssClient() {
-        return OssClientFactory.buildOssClient(ossConnection);
-    }
-
     protected StorageEntity transformOSSObjectToStorageEntity(OSSObject ossObject) {
         ResourceMetadata resourceMetaData = getResourceMetaData(ossObject.getKey());
 
@@ -362,11 +356,13 @@ public class OssStorageOperator extends AbstractStorageOperator implements Close
         StorageEntity entity = new StorageEntity();
         entity.setFileName(new File(absolutePath).getName());
         entity.setFullName(absolutePath);
+        entity.setPfullName(resourceMetaData.getResourceParentAbsolutePath());
         entity.setDirectory(resourceMetaData.isDirectory());
         entity.setType(resourceMetaData.getResourceType());
         entity.setSize(0L);
         entity.setCreateTime(null);
         entity.setUpdateTime(null);
+        entity.setRelativePath(resourceMetaData.getResourceRelativePath());
         return entity;
     }
 

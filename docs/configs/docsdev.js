@@ -80,10 +80,6 @@ export default {
                                 title: 'Task Instance',
                                 link: '/en-us/docs/dev/user_doc/guide/project/task-instance.html',
                             },
-                            {
-                                title: 'Task Definition',
-                                link: '/zh-cn/docs/dev/user_doc/guide/project/task-definition.html',
-                            },
                         ]
                     },
                     {
@@ -158,6 +154,10 @@ export default {
                                 link: '/en-us/docs/dev/user_doc/guide/task/emr.html',
                             },
                             {
+                                title: 'Amazon EMR Serverless',
+                                link: '/en-us/docs/dev/user_doc/guide/task/emr-serverless.html',
+                            },
+                            {
                                 title: 'Apache Zeppelin',
                                 link: '/en-us/docs/dev/user_doc/guide/task/zeppelin.html',
                             },
@@ -202,10 +202,6 @@ export default {
                                 link: '/en-us/docs/dev/user_doc/guide/task/chunjun.html',
                             },
                             {
-                                title: 'Pytorch',
-                                link: '/en-us/docs/dev/user_doc/guide/task/pytorch.html',
-                            },
-                            {
                                 title: 'Amazon DMS',
                                 link: '/en-us/docs/dev/user_doc/guide/task/dms.html',
                             },
@@ -224,6 +220,18 @@ export default {
                             {
                                 title: 'Remote Shell',
                                 link: '/en-us/docs/dev/user_doc/guide/task/remoteshell.html',
+                            },
+                            {
+                                title: 'Aliyun Serverless Spark',
+                                link: '/en-us/docs/dev/user_doc/guide/task/aliyun-serverless-spark.html',
+                            },
+                            {
+                                title: 'Azure DataFactory',
+                                link: '/en-us/docs/dev/user_doc/guide/task/datafactory.html',
+                            },
+                            {
+                                title: 'gRPC',
+                                link: '/en-us/docs/dev/user_doc/guide/task/grpc.html',
                             },
                         ],
                     },
@@ -358,7 +366,11 @@ export default {
                             {
                                 title: 'Vertica',
                                 link: '/en-us/docs/dev/user_doc/guide/datasource/vertica.html',
-                            }
+                            },
+                            {
+                                title: 'DolphinDB',
+                                link: '/en-us/docs/dev/user_doc/guide/datasource/dolphindb.html',
+                            },
                         ],
                     },
                     {
@@ -478,10 +490,6 @@ export default {
                         title: 'Expansion and Reduction',
                         link: '/en-us/docs/dev/user_doc/guide/expansion-reduction.html',
                     },
-                    {
-                        title: 'Demo',
-                        link: '/en-us/docs/dev/user_doc/guide/demo.html',
-                    },
                 ],
             },
             {
@@ -517,6 +525,23 @@ export default {
                             {
                                 title: 'Rainbond Deployment',
                                 link: '/en-us/docs/dev/user_doc/guide/integration/rainbond.html',
+                            },
+                        ],
+                    },
+                    {
+                        title: 'registry-plugins',
+                        children: [
+                            {
+                                title: 'ETCD',
+                                link: '/en-us/docs/dev/user_doc/guide/installation/registry-plugins/etcd.html',
+                            },
+                            {
+                                title: 'JDBC',
+                                link: '/en-us/docs/dev/user_doc/guide/installation/registry-plugins/jdbc.html',
+                            },
+                            {
+                                title: 'Zookeeper',
+                                link: '/en-us/docs/dev/user_doc/guide/installation/registry-plugins/zookeeper.html',
                             },
                         ],
                     },
@@ -795,10 +820,6 @@ export default {
                                 title: '任务实例',
                                 link: '/zh-cn/docs/dev/user_doc/guide/project/task-instance.html',
                             },
-                            {
-                                title: '任务定义',
-                                link: '/zh-cn/docs/dev/user_doc/guide/project/task-definition.html',
-                            },
                         ]
                     },
                     {
@@ -873,6 +894,10 @@ export default {
                                 link: '/zh-cn/docs/dev/user_doc/guide/task/emr.html',
                             },
                             {
+                                title: 'Amazon EMR Serverless',
+                                link: '/zh-cn/docs/dev/user_doc/guide/task/emr-serverless.html',
+                            },
+                            {
                                 title: 'Apache Zeppelin',
                                 link: '/zh-cn/docs/dev/user_doc/guide/task/zeppelin.html',
                             },
@@ -917,10 +942,6 @@ export default {
                                 link: '/zh-cn/docs/dev/user_doc/guide/task/chunjun.html',
                             },
                             {
-                                title: 'Pytorch',
-                                link: '/zh-cn/docs/dev/user_doc/guide/task/pytorch.html',
-                            },
-                            {
                                 title: 'Amazon DMS',
                                 link: '/zh-cn/docs/dev/user_doc/guide/task/dms.html',
                             },
@@ -939,6 +960,18 @@ export default {
                             {
                                 title: 'Remote Shell',
                                 link: '/zh-cn/docs/dev/user_doc/guide/task/remoteshell.html',
+                            },
+                            {
+                                title: 'Aliyun Serverless Spark',
+                                link: '/zh-cn/docs/dev/user_doc/guide/task/aliyun-serverless-spark.html',
+                            },
+                            {
+                                title: 'Azure DataFactory',
+                                link: '/zh-cn/docs/dev/user_doc/guide/task/datafactory.html',
+                            },
+                            {
+                                title: 'gRPC',
+                                link: '/zh-cn/docs/dev/user_doc/guide/task/grpc.html',
                             },
                         ],
                     },
@@ -1007,6 +1040,14 @@ export default {
                                 link: '/zh-cn/docs/dev/user_doc/guide/datasource/spark.html',
                             },
                             {
+                                title: 'Presto',
+                                link: '/zh-cn/docs/dev/user_doc/guide/datasource/presto.html',
+                            },
+                            {
+                                title: 'SQL SERVER',
+                                link: '/zh-cn/docs/dev/user_doc/guide/datasource/sqlserver.html',
+                            },
+                            {
                                 title: 'Amazon Athena',
                                 link: '/zh-cn/docs/dev/user_doc/guide/datasource/athena.html',
                             },
@@ -1017,6 +1058,14 @@ export default {
                             {
                                 title: 'Redshift',
                                 link: '/zh-cn/docs/dev/user_doc/guide/datasource/redshift.html',
+                            },
+                            {
+                                title: 'ClickHouse',
+                                link: '/zh-cn/docs/dev/user_doc/guide/datasource/clickhouse.html',
+                            },
+                            {
+                                title: 'IBM DB2',
+                                link: '/zh-cn/docs/dev/user_doc/guide/datasource/db2.html',
                             },
                             {
                                 title: 'Oracle',
@@ -1057,6 +1106,10 @@ export default {
                             {
                                 title: 'Vertica',
                                 link: '/zh-cn/docs/dev/user_doc/guide/datasource/vertica.html',
+                            },
+                            {
+                                title: 'DolphinDB',
+                                link: '/zh-cn/docs/dev/user_doc/guide/datasource/dolphindb.html',
                             },
                         ],
                     },
@@ -1177,10 +1230,6 @@ export default {
                         title: '扩/缩容',
                         link: '/zh-cn/docs/dev/user_doc/guide/expansion-reduction.html',
                     },
-                    {
-                        title: 'Demo',
-                        link: '/zh-cn/docs/dev/user_doc/guide/demo.html',
-                    },
                 ],
             },
             {
@@ -1216,6 +1265,23 @@ export default {
                             {
                                 title: '基于Rainbond部署(Cluster)',
                                 link: '/zh-cn/docs/dev/user_doc/guide/integration/rainbond.html',
+                            },
+                        ],
+                    },
+                    {
+                        title: '注册中心插件',
+                        children: [
+                            {
+                                title: 'ETCD',
+                                link: '/zh-cn/docs/dev/user_doc/guide/installation/registry-plugins/etcd.html',
+                            },
+                            {
+                                title: 'JDBC',
+                                link: '/zh-cn/docs/dev/user_doc/guide/installation/registry-plugins/jdbc.html',
+                            },
+                            {
+                                title: 'Zookeeper',
+                                link: '/zh-cn/docs/dev/user_doc/guide/installation/registry-plugins/zookeeper.html',
                             },
                         ],
                     },

@@ -18,7 +18,9 @@
 package org.apache.dolphinscheduler.server.master.rpc;
 
 import org.apache.dolphinscheduler.extract.master.ITaskExecutorEventListener;
+import org.apache.dolphinscheduler.plugin.task.api.utils.LogUtils;
 import org.apache.dolphinscheduler.server.master.engine.IWorkflowRepository;
+import org.apache.dolphinscheduler.server.master.engine.task.execution.ITaskExecution;
 import org.apache.dolphinscheduler.server.master.engine.task.lifecycle.event.TaskDispatchedLifecycleEvent;
 import org.apache.dolphinscheduler.server.master.engine.task.lifecycle.event.TaskFailedLifecycleEvent;
 import org.apache.dolphinscheduler.server.master.engine.task.lifecycle.event.TaskKilledLifecycleEvent;
@@ -26,8 +28,7 @@ import org.apache.dolphinscheduler.server.master.engine.task.lifecycle.event.Tas
 import org.apache.dolphinscheduler.server.master.engine.task.lifecycle.event.TaskRunningLifecycleEvent;
 import org.apache.dolphinscheduler.server.master.engine.task.lifecycle.event.TaskRuntimeContextChangedEvent;
 import org.apache.dolphinscheduler.server.master.engine.task.lifecycle.event.TaskSuccessLifecycleEvent;
-import org.apache.dolphinscheduler.server.master.engine.task.runnable.ITaskExecutionRunnable;
-import org.apache.dolphinscheduler.server.master.engine.workflow.runnable.IWorkflowExecutionRunnable;
+import org.apache.dolphinscheduler.server.master.engine.workflow.execution.IWorkflowExecution;
 import org.apache.dolphinscheduler.task.executor.events.IReportableTaskExecutorLifecycleEvent;
 import org.apache.dolphinscheduler.task.executor.events.TaskExecutorDispatchedLifecycleEvent;
 import org.apache.dolphinscheduler.task.executor.events.TaskExecutorFailedLifecycleEvent;
@@ -53,96 +54,135 @@ public class TaskExecutorEventListenerImpl implements ITaskExecutorEventListener
 
     @Override
     public void onTaskExecutorDispatched(final TaskExecutorDispatchedLifecycleEvent taskExecutorDispatchedLifecycleEvent) {
-        final ITaskExecutionRunnable taskExecutionRunnable =
-                getTaskExecutionRunnable(taskExecutorDispatchedLifecycleEvent);
-        final TaskDispatchedLifecycleEvent taskDispatchedLifecycleEvent = TaskDispatchedLifecycleEvent.builder()
-                .taskExecutionRunnable(taskExecutionRunnable)
-                .executorHost(taskExecutorDispatchedLifecycleEvent.getTaskInstanceHost())
-                .build();
+        LogUtils.setWorkflowInstanceIdMDC(taskExecutorDispatchedLifecycleEvent.getWorkflowInstanceId());
+        try {
+            final ITaskExecution taskExecution =
+                    getTaskExecution(taskExecutorDispatchedLifecycleEvent);
+            final TaskDispatchedLifecycleEvent taskDispatchedLifecycleEvent = TaskDispatchedLifecycleEvent.builder()
+                    .taskExecution(taskExecution)
+                    .executorHost(taskExecutorDispatchedLifecycleEvent.getTaskInstanceHost())
+                    .build();
 
-        taskExecutionRunnable.getWorkflowEventBus().publish(taskDispatchedLifecycleEvent);
+            taskExecution.getWorkflowEventBus().publish(taskDispatchedLifecycleEvent);
+        } finally {
+            LogUtils.removeWorkflowInstanceIdMDC();
+        }
     }
 
     @Override
     public void onTaskExecutorRunning(final TaskExecutorStartedLifecycleEvent taskExecutorStartedLifecycleEvent) {
-        final ITaskExecutionRunnable taskExecutionRunnable =
-                getTaskExecutionRunnable(taskExecutorStartedLifecycleEvent);
-        final TaskRunningLifecycleEvent taskRunningEvent = TaskRunningLifecycleEvent.builder()
-                .taskExecutionRunnable(taskExecutionRunnable)
-                .startTime(new Date(taskExecutorStartedLifecycleEvent.getStartTime()))
-                .logPath(taskExecutorStartedLifecycleEvent.getLogPath())
-                .build();
+        LogUtils.setWorkflowInstanceIdMDC(taskExecutorStartedLifecycleEvent.getWorkflowInstanceId());
+        try {
+            final ITaskExecution taskExecution =
+                    getTaskExecution(taskExecutorStartedLifecycleEvent);
+            final TaskRunningLifecycleEvent taskRunningEvent = TaskRunningLifecycleEvent.builder()
+                    .taskExecution(taskExecution)
+                    .startTime(new Date(taskExecutorStartedLifecycleEvent.getStartTime()))
+                    .logPath(taskExecutorStartedLifecycleEvent.getLogPath())
+                    .build();
 
-        taskExecutionRunnable.getWorkflowEventBus().publish(taskRunningEvent);
+            taskExecution.getWorkflowEventBus().publish(taskRunningEvent);
+        } finally {
+            LogUtils.removeWorkflowInstanceIdMDC();
+        }
     }
 
     @Override
     public void onTaskExecutorRuntimeContextChanged(final TaskExecutorRuntimeContextChangedLifecycleEvent taskExecutorRuntimeContextChangedLifecycleEventr) {
-        final ITaskExecutionRunnable taskExecutionRunnable =
-                getTaskExecutionRunnable(taskExecutorRuntimeContextChangedLifecycleEventr);
+        LogUtils.setWorkflowInstanceIdMDC(taskExecutorRuntimeContextChangedLifecycleEventr.getWorkflowInstanceId());
+        try {
+            final ITaskExecution taskExecution =
+                    getTaskExecution(taskExecutorRuntimeContextChangedLifecycleEventr);
 
-        final TaskRuntimeContextChangedEvent taskRuntimeContextChangedEvent = TaskRuntimeContextChangedEvent.builder()
-                .taskExecutionRunnable(taskExecutionRunnable)
-                .runtimeContext(taskExecutorRuntimeContextChangedLifecycleEventr.getAppIds())
-                .build();
+            final TaskRuntimeContextChangedEvent taskRuntimeContextChangedEvent =
+                    TaskRuntimeContextChangedEvent.builder()
+                            .taskExecution(taskExecution)
+                            .runtimeContext(taskExecutorRuntimeContextChangedLifecycleEventr.getAppIds())
+                            .build();
 
-        taskExecutionRunnable.getWorkflowEventBus().publish(taskRuntimeContextChangedEvent);
+            taskExecution.getWorkflowEventBus().publish(taskRuntimeContextChangedEvent);
+        } finally {
+            LogUtils.removeWorkflowInstanceIdMDC();
+        }
     }
 
     @Override
     public void onTaskExecutorSuccess(final TaskExecutorSuccessLifecycleEvent taskExecutorSuccessLifecycleEvent) {
-        final ITaskExecutionRunnable taskExecutionRunnable =
-                getTaskExecutionRunnable(taskExecutorSuccessLifecycleEvent);
-        final TaskSuccessLifecycleEvent taskSuccessEvent = TaskSuccessLifecycleEvent.builder()
-                .taskExecutionRunnable(taskExecutionRunnable)
-                .endTime(new Date(taskExecutorSuccessLifecycleEvent.getEndTime()))
-                .varPool(taskExecutorSuccessLifecycleEvent.getVarPool())
-                .build();
-        taskExecutionRunnable.getWorkflowEventBus().publish(taskSuccessEvent);
+        LogUtils.setWorkflowInstanceIdMDC(taskExecutorSuccessLifecycleEvent.getWorkflowInstanceId());
+        try {
+            final ITaskExecution taskExecution =
+                    getTaskExecution(taskExecutorSuccessLifecycleEvent);
+            final TaskSuccessLifecycleEvent taskSuccessEvent = TaskSuccessLifecycleEvent.builder()
+                    .taskExecution(taskExecution)
+                    .endTime(new Date(taskExecutorSuccessLifecycleEvent.getEndTime()))
+                    .varPool(taskExecutorSuccessLifecycleEvent.getVarPool())
+                    .build();
+            taskExecution.getWorkflowEventBus().publish(taskSuccessEvent);
+        } finally {
+            LogUtils.removeWorkflowInstanceIdMDC();
+        }
     }
 
     @Override
     public void onTaskExecutorFailed(final TaskExecutorFailedLifecycleEvent taskExecutorFailedLifecycleEvent) {
-        final ITaskExecutionRunnable taskExecutionRunnable = getTaskExecutionRunnable(taskExecutorFailedLifecycleEvent);
-        final TaskFailedLifecycleEvent taskFailedEvent = TaskFailedLifecycleEvent.builder()
-                .taskExecutionRunnable(taskExecutionRunnable)
-                .endTime(new Date(taskExecutorFailedLifecycleEvent.getEndTime()))
-                .build();
-        taskExecutionRunnable.getWorkflowEventBus().publish(taskFailedEvent);
+        LogUtils.setWorkflowInstanceIdMDC(taskExecutorFailedLifecycleEvent.getWorkflowInstanceId());
+        try {
+            final ITaskExecution taskExecution =
+                    getTaskExecution(taskExecutorFailedLifecycleEvent);
+            final TaskFailedLifecycleEvent taskFailedEvent = TaskFailedLifecycleEvent.builder()
+                    .taskExecution(taskExecution)
+                    .endTime(new Date(taskExecutorFailedLifecycleEvent.getEndTime()))
+                    .build();
+            taskExecution.getWorkflowEventBus().publish(taskFailedEvent);
+        } finally {
+            LogUtils.removeWorkflowInstanceIdMDC();
+        }
     }
 
     @Override
     public void onTaskExecutorKilled(final TaskExecutorKilledLifecycleEvent taskExecutorKilledLifecycleEvent) {
-        final ITaskExecutionRunnable taskExecutionRunnable = getTaskExecutionRunnable(taskExecutorKilledLifecycleEvent);
-        final TaskKilledLifecycleEvent taskKilledEvent = TaskKilledLifecycleEvent.builder()
-                .taskExecutionRunnable(taskExecutionRunnable)
-                .endTime(new Date(taskExecutorKilledLifecycleEvent.getEndTime()))
-                .build();
-        taskExecutionRunnable.getWorkflowEventBus().publish(taskKilledEvent);
+        LogUtils.setWorkflowInstanceIdMDC(taskExecutorKilledLifecycleEvent.getWorkflowInstanceId());
+        try {
+            final ITaskExecution taskExecution =
+                    getTaskExecution(taskExecutorKilledLifecycleEvent);
+            final TaskKilledLifecycleEvent taskKilledEvent = TaskKilledLifecycleEvent.builder()
+                    .taskExecution(taskExecution)
+                    .endTime(new Date(taskExecutorKilledLifecycleEvent.getEndTime()))
+                    .build();
+            taskExecution.getWorkflowEventBus().publish(taskKilledEvent);
+        } finally {
+            LogUtils.removeWorkflowInstanceIdMDC();
+        }
     }
 
     @Override
     public void onTaskExecutorPaused(final TaskExecutorPausedLifecycleEvent taskExecutorPausedLifecycleEvent) {
-        final ITaskExecutionRunnable taskExecutionRunnable = getTaskExecutionRunnable(taskExecutorPausedLifecycleEvent);
-        final TaskPausedLifecycleEvent taskPausedEvent = TaskPausedLifecycleEvent.of(taskExecutionRunnable);
-        taskExecutionRunnable.getWorkflowEventBus().publish(taskPausedEvent);
+        LogUtils.setWorkflowInstanceIdMDC(taskExecutorPausedLifecycleEvent.getWorkflowInstanceId());
+        try {
+            final ITaskExecution taskExecution =
+                    getTaskExecution(taskExecutorPausedLifecycleEvent);
+            final TaskPausedLifecycleEvent taskPausedEvent = TaskPausedLifecycleEvent.of(taskExecution);
+            taskExecution.getWorkflowEventBus().publish(taskPausedEvent);
+        } finally {
+            LogUtils.removeWorkflowInstanceIdMDC();
+        }
     }
 
-    private ITaskExecutionRunnable getTaskExecutionRunnable(final IReportableTaskExecutorLifecycleEvent reportableTaskExecutorLifecycleEvent) {
+    private ITaskExecution getTaskExecution(final IReportableTaskExecutorLifecycleEvent reportableTaskExecutorLifecycleEvent) {
         final int workflowInstanceId = reportableTaskExecutorLifecycleEvent.getWorkflowInstanceId();
         final int taskInstanceId = reportableTaskExecutorLifecycleEvent.getTaskInstanceId();
 
-        final IWorkflowExecutionRunnable workflowExecutionRunnable = workflowRepository.get(workflowInstanceId);
-        if (workflowExecutionRunnable == null) {
+        final IWorkflowExecution workflowExecution = workflowRepository.get(workflowInstanceId);
+        if (workflowExecution == null) {
             throw new IllegalArgumentException("Cannot find the WorkflowExecuteRunnable: " + workflowInstanceId);
         }
-        final ITaskExecutionRunnable taskExecutionRunnable = workflowExecutionRunnable.getWorkflowExecuteContext()
+        final ITaskExecution taskExecution = workflowExecution.getWorkflowExecuteContext()
                 .getWorkflowExecutionGraph()
-                .getTaskExecutionRunnableById(taskInstanceId);
-        if (taskExecutionRunnable == null) {
+                .getTaskExecutionById(taskInstanceId);
+        if (taskExecution == null) {
             throw new IllegalArgumentException("Cannot find the TaskExecuteRunnable: " + taskInstanceId);
         }
-        return taskExecutionRunnable;
+        return taskExecution;
     }
 
 }

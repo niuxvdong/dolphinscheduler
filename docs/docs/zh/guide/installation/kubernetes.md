@@ -19,7 +19,7 @@ Kubernetes 部署目的是在 Kubernetes 集群中部署 DolphinScheduler 服务
 helm upgrade --install dolphinscheduler --create-namespace --namespace dolphinscheduler oci://registry-1.docker.io/apache/dolphinscheduler-helm --version <version>
 ```
 
-这些命令以默认配置在 Kubernetes 集群上部署 DolphinScheduler，[附录-配置](#appendix-configuration)部分列出了可以在安装过程中配置的参数 <!-- markdown-link-check-disable-line -->
+这些命令以默认配置在 Kubernetes 集群上部署 DolphinScheduler，[附录-配置](#附录-配置)部分列出了可以在安装过程中配置的参数 <!-- markdown-link-check-disable-line -->
 
 > **提示**: 列出所有已发布的版本，使用 `helm list`
 
@@ -112,7 +112,7 @@ helm upgrade --install dolphinscheduler --create-namespace --namespace dolphinsc
 
 ## 配置
 
-配置文件为 `values.yaml`，[附录-配置](#appendix-configuration) 表格列出了 DolphinScheduler 的可配置参数及其默认值 <!-- markdown-link-check-disable-line -->
+配置文件为 `values.yaml`，[附录-配置](#附录-配置) 表格列出了 DolphinScheduler 的可配置参数及其默认值 <!-- markdown-link-check-disable-line -->
 
 ## 支持矩阵
 
@@ -374,7 +374,7 @@ docker build -t apache/dolphinscheduler-worker:python3 .
 
 3. 部署 dolphinscheduler (详见**安装 dolphinscheduler**)
 
-4. 复制 Spark 3.1.1 二进制包到 Docker 容器中
+4. 复制 Spark 2.4.7 二进制包到 Docker 容器中
 
 ```bash
 kubectl cp spark-2.4.7-bin-hadoop2.7.tgz dolphinscheduler-worker-0:/opt/soft

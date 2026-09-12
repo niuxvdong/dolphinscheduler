@@ -28,7 +28,6 @@ The directory structure of DolphinScheduler is as follows:
 │   │   └── jvm_args_env.sh                     script to set JVM args of DolphinScheduler alert-server
 │   ├── conf
 │   │   ├── application.yaml                    configurations of alert-server
-│   │   ├── bootstrap.yaml                      configurations for Spring Cloud bootstrap, mostly you don't need to modify this,
 │   │   ├── common.properties                   configurations of common-service like storage, credentials, etc.
 │   │   ├── dolphinscheduler_env.sh             script to load environment variables for alert-server
 │   │   └── logback-spring.xml                  configurations of alert-service log
@@ -40,7 +39,6 @@ The directory structure of DolphinScheduler is as follows:
 │   │   └── jvm_args_env.sh                     script to set JVM args of DolphinScheduler api-server
 │   ├── conf
 │   │   ├── application.yaml                    configurations of api-server
-│   │   ├── bootstrap.yaml                      configurations for Spring Cloud bootstrap, mostly you don't need to modify this,
 │   │   ├── common.properties                   configurations of common-service like storage, credentials, etc.
 │   │   ├── dolphinscheduler_env.sh             script to load environment variables for api-server
 │   │   └── logback-spring.xml                  configurations of api-service log
@@ -53,7 +51,6 @@ The directory structure of DolphinScheduler is as follows:
 │   │   └── jvm_args_env.sh                     script to set JVM args of DolphinScheduler master-server
 │   ├── conf
 │   │   ├── application.yaml                    configurations of master-server
-│   │   ├── bootstrap.yaml                      configurations for Spring Cloud bootstrap, mostly you don't need to modify this,
 │   │   ├── common.properties                   configurations of common-service like storage, credentials, etc.
 │   │   ├── dolphinscheduler_env.sh             script to load environment variables for master-server
 │   │   └── logback-spring.xml                  configurations of master-service log
@@ -65,7 +62,6 @@ The directory structure of DolphinScheduler is as follows:
 │   │   └── jvm_args_env.sh                     script to set JVM args of DolphinScheduler standalone-server
 │   ├── conf
 │   │   ├── application.yaml                    configurations of standalone-server
-│   │   ├── bootstrap.yaml                      configurations for Spring Cloud bootstrap, mostly you don't need to modify this,
 │   │   ├── common.properties                   configurations of common-service like storage, credentials, etc.
 │   │   ├── dolphinscheduler_env.sh             script to load environment variables for standalone-server
 │   │   ├── logback-spring.xml                  configurations of standalone-service log
@@ -88,7 +84,6 @@ The directory structure of DolphinScheduler is as follows:
 │   │   └── jvm_args_env.sh                 script to set JVM args of DolphinScheduler worker-server
 │   ├── conf
 │   │   ├── application.yaml                configurations of worker-server
-│   │   ├── bootstrap.yaml                  configurations for Spring Cloud bootstrap, mostly you don't need to modify this,
 │   │   ├── common.properties               configurations of common-service like storage, credentials, etc.
 │   │   ├── dolphinscheduler_env.sh         script to load environment variables for worker-server
 │   │   └── logback-spring.xml              configurations of worker-service log
@@ -180,14 +175,14 @@ The default configuration is as follows:
 | registry.zookeeper.session-timeout              | 30s                   | session timeout                                                                                                                                                                         |
 | registry.zookeeper.connection-timeout           | 30s                   | connection timeout                                                                                                                                                                      |
 | registry.zookeeper.block-until-connected        | 600ms                 | waiting time to block until the connection succeeds                                                                                                                                     |
-| registry.zookeeper.digest                       | {username}:{password} | digest of zookeeper to access znode, works only when acl is enabled, for more details please check [https://zookeeper.apache.org/doc/r3.4.14/zookeeperAdmin.html](Apache Zookeeper doc) |
+| registry.zookeeper.digest                       | {username}:{password} | digest of zookeeper to access znode, works only when acl is enabled, for more details please check [Apache Zookeeper doc](https://zookeeper.apache.org/doc/r3.4.14/zookeeperAdmin.html) |
 
 Note that DolphinScheduler also supports zookeeper related configuration through `bin/env/dolphinscheduler_env.sh`.
 
 For ETCD Registry, please see more details
-on [link](https://github.com/apache/dolphinscheduler/blob/dev/dolphinscheduler-registry/dolphinscheduler-registry-plugins/dolphinscheduler-registry-etcd/README.md).
+on [link](../guide/installation/registry-plugins/etcd.md).
 For JDBC Registry, please see more details
-on [link](https://github.com/apache/dolphinscheduler/blob/dev/dolphinscheduler-registry/dolphinscheduler-registry-plugins/dolphinscheduler-registry-jdbc/README.md).
+on [link](../guide/installation/registry-plugins/jdbc.md).
 
 ### common.properties [hadoop、s3、yarn config properties]
 
@@ -275,21 +270,26 @@ Location: `api-server/conf/application.yaml`
 
 Location: `master-server/conf/application.yaml`
 
-|                                 Parameters                                  |        Default value         |                                                                    Description                                                                    |
-|-----------------------------------------------------------------------------|------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------|
-| master.listen-port                                                          | 5678                         | master listen port                                                                                                                                |
-| master.logic-task-config.task-executor-thread-count                         | 2 * CPU +1                   | The thread size used to execute logic task                                                                                                        |
-| master.worker-load-balancer-configuration-properties.type                   | DYNAMIC_WEIGHTED_ROUND_ROBIN | Master will use the worker's cpu/memory/threadPool usage to calculate the worker load, the lower load will have more change to be dispatched task |
-| master.max-heartbeat-interval                                               | 10s                          | master max heartbeat interval                                                                                                                     |
-| master.server-load-protection.enabled                                       | true                         | If set true, will open master overload protection                                                                                                 |
-| master.server-load-protection.max-system-cpu-usage-percentage-thresholds    | 0.7                          | Master max system cpu usage, when the master's system cpu usage is smaller then this value, master server can execute workflow.                   |
-| master.server-load-protection.max-jvm-cpu-usage-percentage-thresholds       | 0.7                          | Master max JVM cpu usage, when the master's jvm cpu usage is smaller then this value, master server can execute workflow.                         |
-| master.server-load-protection.max-system-memory-usage-percentage-thresholds | 0.7                          | Master max system memory usage , when the master's system memory usage is smaller then this value, master server can execute workflow.            |
-| master.server-load-protection.max-disk-usage-percentage-thresholds          | 0.7                          | Master max disk usage , when the master's disk usage is smaller then this value, master server can execute workflow.                              |
-| master.worker-group-refresh-interval                                        | 10s                          | The interval to refresh worker group from db to memory                                                                                            |
-| master.command-fetch-strategy.type                                          | ID_SLOT_BASED                | The command fetch strategy, only support `ID_SLOT_BASED`                                                                                          |
-| master.command-fetch-strategy.config.id-step                                | 1                            | The id auto incremental step of t_ds_command in db                                                                                                |
-| master.command-fetch-strategy.config.fetch-size                             | 10                           | The number of commands fetched by master                                                                                                          |
+|                                 Parameters                                  |        Default value         |                                                                                          Description                                                                                          |
+|-----------------------------------------------------------------------------|------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| master.listen-port                                                          | 5678                         | master listen port                                                                                                                                                                            |
+| master.logic-task-config.task-executor-thread-count                         | 2 * CPU +1                   | The thread size used to execute logic task                                                                                                                                                    |
+| master.worker-load-balancer-configuration-properties.type                   | DYNAMIC_WEIGHTED_ROUND_ROBIN | Master will use the worker's cpu/memory/threadPool usage to calculate the worker load, the lower load will have more change to be dispatched task                                             |
+| master.max-heartbeat-interval                                               | 10s                          | master max heartbeat interval                                                                                                                                                                 |
+| master.server-load-protection.enabled                                       | true                         | If set true, will open master overload protection                                                                                                                                             |
+| master.server-load-protection.max-system-cpu-usage-percentage-thresholds    | 0.8                          | Master max system cpu usage, when the master's system cpu usage is smaller then this value, master server can execute workflow.                                                               |
+| master.server-load-protection.max-jvm-cpu-usage-percentage-thresholds       | 0.8                          | Master max JVM cpu usage, when the master's jvm cpu usage is smaller then this value, master server can execute workflow.                                                                     |
+| master.server-load-protection.max-system-memory-usage-percentage-thresholds | 0.8                          | Master max system memory usage , when the master's system memory usage is smaller then this value, master server can execute workflow.                                                        |
+| master.server-load-protection.max-disk-usage-percentage-thresholds          | 0.8                          | Master max disk usage , when the master's disk usage is smaller then this value, master server can execute workflow.                                                                          |
+| master.server-load-protection.max-concurrent-workflow-instances             | 2147483647                   | Master max concurrent workflow instances, when the master's workflow instance count reaches or exceeds this value, master server will be marked as busy.                                      |
+| master.server-load-protection.max-workflow-instance-runtime                 | 0m                           | Maximum allowed running time for a workflow instance. If the running duration exceeds this value, the instance will be kill. The default value of 0d indicates no limit, the min value is 1m. |
+| master.server-load-protection.max-task-instance-runtime                     | 0m                           | Maximum allowed running time for a task instance. If the running duration exceeds this value, the instance will be kill. The default value of 0d indicates no limit, the min value is 1m.     |
+| master.worker-group-refresh-interval                                        | 10s                          | The interval to refresh worker group from db to memory                                                                                                                                        |
+| master.command-fetch-strategy.type                                          | ID_SLOT_BASED                | The command fetch strategy, only support `ID_SLOT_BASED`                                                                                                                                      |
+| master.command-fetch-strategy.config.id-step                                | 1                            | The id auto incremental step of t_ds_command in db                                                                                                                                            |
+| master.command-fetch-strategy.config.fetch-size                             | 10                           | The number of commands fetched by master                                                                                                                                                      |
+| master.task-dispatch-policy.dispatch-timeout-enabled                        | false                        | Indicates whether the dispatch timeout checking mechanism is enabled                                                                                                                          |
+| master.task-dispatch-policy.max-task-dispatch-duration                      | 1h                           | The maximum allowed duration a task may wait in the dispatch queue before being assigned to a worker                                                                                          |
 
 ### Worker Server related configuration
 
@@ -301,10 +301,10 @@ Location: `worker-server/conf/application.yaml`
 | worker.max-heartbeat-interval                                               | 10s           | worker-service max heartbeat interval                                                                                                                                                                                                                                                                             |
 | worker.host-weight                                                          | 100           | worker host weight to dispatch tasks                                                                                                                                                                                                                                                                              |
 | worker.server-load-protection.enabled                                       | true          | If set true will open worker overload protection                                                                                                                                                                                                                                                                  |
-| worker.server-load-protection.max-system-cpu-usage-percentage-thresholds    | 0.7           | Worker max system cpu usage, when the worker's system cpu usage is smaller then this value, master server can execute workflow.                                                                                                                                                                                   |
-| worker.server-load-protection.max-jvm-cpu-usage-percentage-thresholds       | 0.7           | Worker max JVM cpu usage, when the worker's jvm cpu usage is smaller then this value, master server can execute workflow.                                                                                                                                                                                         |
-| worker.server-load-protection.max-system-memory-usage-percentage-thresholds | 0.7           | Worker max system memory usage , when the worker's system memory usage is smaller then this value, master server can execute workflow.                                                                                                                                                                            |
-| worker.server-load-protection.max-disk-usage-percentage-thresholds          | 0.7           | Worker max disk usage , when the worker's disk usage is smaller then this value, master server can execute workflow.                                                                                                                                                                                              |
+| worker.server-load-protection.max-system-cpu-usage-percentage-thresholds    | 0.8           | Worker max system cpu usage, when the worker's system cpu usage is smaller then this value, master server can execute workflow.                                                                                                                                                                                   |
+| worker.server-load-protection.max-jvm-cpu-usage-percentage-thresholds       | 0.8           | Worker max JVM cpu usage, when the worker's jvm cpu usage is smaller then this value, master server can execute workflow.                                                                                                                                                                                         |
+| worker.server-load-protection.max-system-memory-usage-percentage-thresholds | 0.8           | Worker max system memory usage , when the worker's system memory usage is smaller then this value, master server can execute workflow.                                                                                                                                                                            |
+| worker.server-load-protection.max-disk-usage-percentage-thresholds          | 0.8           | Worker max disk usage , when the worker's disk usage is smaller then this value, master server can execute workflow.                                                                                                                                                                                              |
 | worker.registry-disconnect-strategy.strategy                                | stop          | Used when the worker disconnect from registry, default value: stop. Optional values include stop, waiting                                                                                                                                                                                                         |
 | worker.registry-disconnect-strategy.max-waiting-time                        | 100s          | Used when the worker disconnect from registry, and the disconnect strategy is waiting, this config means the worker will waiting to reconnect to registry in given times, and after the waiting times, if the worker still cannot connect to registry, will stop itself, if the value is 0s, will wait infinitely |
 | worker.physical-task-config.task-executor-thread-size                       | 100           | The thread size used to execute physical task                                                                                                                                                                                                                                                                     |
@@ -331,19 +331,19 @@ This part describes quartz configs and configure them based on your practical si
 
 The default configuration is as follows:
 
-|                               Parameters                                |                  Default value                  |
-|-------------------------------------------------------------------------|-------------------------------------------------|
-| spring.quartz.properties.org.quartz.jobStore.isClustered                | true                                            |
-| spring.quartz.properties.org.quartz.jobStore.class                      | org.quartz.impl.jdbcjobstore.JobStoreTX         |
-| spring.quartz.properties.org.quartz.scheduler.instanceId                | AUTO                                            |
-| spring.quartz.properties.org.quartz.jobStore.tablePrefix                | QRTZ_                                           |
-| spring.quartz.properties.org.quartz.jobStore.acquireTriggersWithinLock  | true                                            |
-| spring.quartz.properties.org.quartz.scheduler.instanceName              | DolphinScheduler                                |
-| spring.quartz.properties.org.quartz.jobStore.useProperties              | false                                           |
-| spring.quartz.properties.org.quartz.jobStore.misfireThreshold           | 60000                                           |
-| spring.quartz.properties.org.quartz.scheduler.makeSchedulerThreadDaemon | true                                            |
-| spring.quartz.properties.org.quartz.jobStore.driverDelegateClass        | org.quartz.impl.jdbcjobstore.PostgreSQLDelegate |
-| spring.quartz.properties.org.quartz.jobStore.clusterCheckinInterval     | 5000                                            |
+|                               Parameters                                |                         Default value                         |
+|-------------------------------------------------------------------------|---------------------------------------------------------------|
+| spring.quartz.properties.org.quartz.jobStore.isClustered                | true                                                          |
+| spring.quartz.properties.org.quartz.jobStore.class                      | org.springframework.scheduling.quartz.LocalDataSourceJobStore |
+| spring.quartz.properties.org.quartz.scheduler.instanceId                | AUTO                                                          |
+| spring.quartz.properties.org.quartz.jobStore.tablePrefix                | QRTZ_                                                         |
+| spring.quartz.properties.org.quartz.jobStore.acquireTriggersWithinLock  | true                                                          |
+| spring.quartz.properties.org.quartz.scheduler.instanceName              | DolphinScheduler                                              |
+| spring.quartz.properties.org.quartz.jobStore.useProperties              | false                                                         |
+| spring.quartz.properties.org.quartz.jobStore.misfireThreshold           | 60000                                                         |
+| spring.quartz.properties.org.quartz.scheduler.makeSchedulerThreadDaemon | true                                                          |
+| spring.quartz.properties.org.quartz.jobStore.driverDelegateClass        | org.quartz.impl.jdbcjobstore.PostgreSQLDelegate               |
+| spring.quartz.properties.org.quartz.jobStore.clusterCheckinInterval     | 5000                                                          |
 
 The above configuration items is the same in *Master Server* and *Api Server*, but their *Quartz Scheduler* threadpool
 configuration is different.

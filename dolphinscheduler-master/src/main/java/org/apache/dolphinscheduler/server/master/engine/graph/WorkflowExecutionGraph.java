@@ -21,21 +21,24 @@ import org.apache.dolphinscheduler.common.enums.Flag;
 import org.apache.dolphinscheduler.dao.entity.TaskInstance;
 import org.apache.dolphinscheduler.plugin.task.api.enums.TaskExecutionStatus;
 import org.apache.dolphinscheduler.plugin.task.api.utils.TaskTypeUtils;
-import org.apache.dolphinscheduler.server.master.engine.task.runnable.ITaskExecutionRunnable;
+import org.apache.dolphinscheduler.server.master.engine.task.execution.ITaskExecution;
 
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 public class WorkflowExecutionGraph implements IWorkflowExecutionGraph {
 
-    private final Map<String, ITaskExecutionRunnable> totalTaskExecuteRunnableMap;
+    // Store all the task execution runnable in the execution graph.
+    private final Map<String, ITaskExecution> totalTaskExecuteRunnableMap;
 
     private final Set<String> failureTaskChains;
 
@@ -49,9 +52,9 @@ public class WorkflowExecutionGraph implements IWorkflowExecutionGraph {
 
     private final Map<String, Set<String>> successors;
 
-    private final Set<String> activeTaskExecutionRunnable;
+    private final Set<String> activeTaskExecution;
 
-    private final Set<String> inActiveTaskExecutionRunnable;
+    private final Set<String> inActiveTaskExecution;
 
     public WorkflowExecutionGraph() {
         this.failureTaskChains = new HashSet<>();
@@ -61,15 +64,15 @@ public class WorkflowExecutionGraph implements IWorkflowExecutionGraph {
         this.predecessors = new HashMap<>();
         this.successors = new HashMap<>();
         this.totalTaskExecuteRunnableMap = new HashMap<>();
-        this.activeTaskExecutionRunnable = new HashSet<>();
-        this.inActiveTaskExecutionRunnable = new HashSet<>();
+        this.activeTaskExecution = new HashSet<>();
+        this.inActiveTaskExecution = new HashSet<>();
     }
 
     @Override
-    public void addNode(final ITaskExecutionRunnable taskExecutionRunnable) {
-        totalTaskExecuteRunnableMap.put(taskExecutionRunnable.getName(), taskExecutionRunnable);
-        predecessors.computeIfAbsent(taskExecutionRunnable.getName(), k -> new HashSet<>());
-        successors.computeIfAbsent(taskExecutionRunnable.getName(), k -> new HashSet<>());
+    public void addNode(final ITaskExecution taskExecution) {
+        totalTaskExecuteRunnableMap.put(taskExecution.getName(), taskExecution);
+        predecessors.computeIfAbsent(taskExecution.getName(), k -> new HashSet<>());
+        successors.computeIfAbsent(taskExecution.getName(), k -> new HashSet<>());
     }
 
     @Override
@@ -79,178 +82,202 @@ public class WorkflowExecutionGraph implements IWorkflowExecutionGraph {
     }
 
     @Override
-    public List<ITaskExecutionRunnable> getStartNodes() {
+    public void removeUnReachableEdge() {
+        // If the node in successors or predecessors is not in taskExecuteRunnableMap
+        // It means that the node is not executable, so we need to filter it out
+        Consumer<Map<String, Set<String>>> removeUnReachableEdge = edgeMap -> {
+            final Iterator<Map.Entry<String, Set<String>>> iterator = edgeMap.entrySet().iterator();
+            while (iterator.hasNext()) {
+                Map.Entry<String, Set<String>> entry = iterator.next();
+                if (!totalTaskExecuteRunnableMap.containsKey(entry.getKey())) {
+                    iterator.remove();
+                    continue;
+                }
+                Set<String> toTasks = entry.getValue();
+                toTasks.removeIf(toTask -> !totalTaskExecuteRunnableMap.containsKey(toTask));
+            }
+        };
+        removeUnReachableEdge.accept(successors);
+        removeUnReachableEdge.accept(predecessors);
+    }
+
+    @Override
+    public List<ITaskExecution> getStartNodes() {
         return totalTaskExecuteRunnableMap.values()
                 .stream()
-                .filter(taskExecutionRunnable -> CollectionUtils
-                        .isEmpty(predecessors.get(taskExecutionRunnable.getName())))
+                .filter(taskExecution -> CollectionUtils
+                        .isEmpty(predecessors.get(taskExecution.getName())))
                 .collect(Collectors.toList());
     }
 
     @Override
-    public List<ITaskExecutionRunnable> getPredecessors(final String taskName) {
+    public List<ITaskExecution> getPredecessors(final String taskName) {
         if (!predecessors.containsKey(taskName)) {
             throw new IllegalArgumentException("Cannot find the task: " + taskName + " in graph");
         }
         return predecessors
                 .get(taskName)
                 .stream()
-                .map(this::getTaskExecutionRunnableByName)
+                .map(this::getTaskExecutionByName)
                 .collect(Collectors.toList());
     }
 
     @Override
-    public List<ITaskExecutionRunnable> getSuccessors(final String taskName) {
+    public List<ITaskExecution> getSuccessors(final String taskName) {
         if (!successors.containsKey(taskName)) {
             throw new IllegalArgumentException("Cannot find the task code in graph");
         }
         return successors
                 .get(taskName)
                 .stream()
-                .map(this::getTaskExecutionRunnableByName)
+                .map(this::getTaskExecutionByName)
                 .collect(Collectors.toList());
     }
 
     @Override
-    public List<ITaskExecutionRunnable> getSuccessors(final ITaskExecutionRunnable taskExecutionRunnable) {
-        return getSuccessors(taskExecutionRunnable.getName());
+    public List<ITaskExecution> getSuccessors(final ITaskExecution taskExecution) {
+        return getSuccessors(taskExecution.getName());
     }
 
     @Override
-    public ITaskExecutionRunnable getTaskExecutionRunnableByName(final String taskName) {
+    public ITaskExecution getTaskExecutionByName(final String taskName) {
         return totalTaskExecuteRunnableMap.get(taskName);
     }
 
     @Override
-    public ITaskExecutionRunnable getTaskExecutionRunnableById(final Integer taskInstanceId) {
+    public ITaskExecution getTaskExecutionById(final Integer taskInstanceId) {
         return totalTaskExecuteRunnableMap.values()
                 .stream()
-                .filter(taskExecutionRunnable -> taskExecutionRunnable.getTaskInstance() != null
-                        && taskInstanceId.equals(taskExecutionRunnable.getTaskInstance().getId()))
+                .filter(taskExecution -> taskExecution.getTaskInstance() != null
+                        && taskInstanceId.equals(taskExecution.getTaskInstance().getId()))
                 .findFirst()
                 .orElse(null);
     }
 
     @Override
-    public ITaskExecutionRunnable getTaskExecutionRunnableByTaskCode(final Long taskCode) {
+    public ITaskExecution getTaskExecutionByTaskCode(final Long taskCode) {
         return totalTaskExecuteRunnableMap.values()
                 .stream()
-                .filter(taskExecutionRunnable -> taskExecutionRunnable.getTaskDefinition() != null
-                        && taskCode.equals(taskExecutionRunnable.getTaskDefinition().getCode()))
+                .filter(taskExecution -> taskExecution.getTaskDefinition() != null
+                        && taskCode.equals(taskExecution.getTaskDefinition().getCode()))
                 .findFirst()
                 .orElse(null);
     }
 
     @Override
-    public boolean isTaskExecutionRunnableActive(final ITaskExecutionRunnable taskExecutionRunnable) {
-        return activeTaskExecutionRunnable.contains(taskExecutionRunnable.getName());
+    public boolean isTaskExecutionActive(final ITaskExecution taskExecution) {
+        return activeTaskExecution.contains(taskExecution.getName());
     }
 
     @Override
-    public boolean isTaskExecutionRunnableInActive(ITaskExecutionRunnable taskExecutionRunnable) {
-        return inActiveTaskExecutionRunnable.contains(taskExecutionRunnable.getName());
+    public boolean isTaskExecutionInActive(ITaskExecution taskExecution) {
+        return inActiveTaskExecution.contains(taskExecution.getName());
     }
 
     @Override
-    public boolean isTaskExecutionRunnableKilled(final ITaskExecutionRunnable taskExecutionRunnable) {
-        return killedTaskChains.contains(taskExecutionRunnable.getName());
+    public boolean isTaskExecutionKilled(final ITaskExecution taskExecution) {
+        return killedTaskChains.contains(taskExecution.getName());
     }
 
     @Override
-    public boolean isTaskExecutionRunnableFailed(ITaskExecutionRunnable taskExecutionRunnable) {
-        return failureTaskChains.contains(taskExecutionRunnable.getName());
+    public boolean isTaskExecutionFailed(ITaskExecution taskExecution) {
+        return failureTaskChains.contains(taskExecution.getName());
     }
 
     @Override
-    public boolean isTaskExecutionRunnablePaused(ITaskExecutionRunnable taskExecutionRunnable) {
-        return pausedTaskChains.contains(taskExecutionRunnable.getName());
+    public boolean isTaskExecutionPaused(ITaskExecution taskExecution) {
+        return pausedTaskChains.contains(taskExecution.getName());
     }
 
     @Override
-    public List<ITaskExecutionRunnable> getActiveTaskExecutionRunnable() {
-        return activeTaskExecutionRunnable
+    public List<ITaskExecution> getActiveTaskExecution() {
+        return activeTaskExecution
                 .stream()
-                .map(this::getTaskExecutionRunnableByName)
+                .map(this::getTaskExecutionByName)
                 .collect(Collectors.toList());
     }
 
     @Override
-    public List<ITaskExecutionRunnable> getAllTaskExecutionRunnable() {
+    public List<ITaskExecution> getAllTaskExecution() {
         return new ArrayList<>(totalTaskExecuteRunnableMap.values());
     }
 
     @Override
-    public boolean isTriggerConditionMet(final ITaskExecutionRunnable taskExecutionRunnable) {
-        return getPredecessors(taskExecutionRunnable.getName())
-                .stream()
-                .allMatch(predecessor -> isTaskExecutionRunnableInActive(predecessor)
-                        && !isTaskExecutionRunnableFailed(predecessor)
-                        && !isTaskExecutionRunnablePaused(predecessor)
-                        && !isTaskExecutionRunnableKilled(predecessor));
-    }
-
-    @Override
-    public boolean isAllTaskExecutionRunnableChainFinish() {
-        return activeTaskExecutionRunnable.isEmpty();
-    }
-
-    @Override
-    public boolean isAllTaskExecutionRunnableChainSuccess() {
-        if (!isAllTaskExecutionRunnableChainFinish()) {
+    public boolean isTriggerConditionMet(final ITaskExecution taskExecution) {
+        if (isTaskExecutionActive(taskExecution)
+                || isTaskExecutionInActive(taskExecution)) {
             return false;
         }
-        return !isExistFailureTaskExecutionRunnableChain()
-                && !isExistPauseTaskExecutionRunnableChain()
-                && !isExistKillTaskExecutionRunnableChain();
+        return getPredecessors(taskExecution.getName())
+                .stream()
+                .allMatch(predecessor -> isTaskExecutionInActive(predecessor)
+                        && !isTaskExecutionFailed(predecessor)
+                        && !isTaskExecutionPaused(predecessor)
+                        && !isTaskExecutionKilled(predecessor));
     }
 
     @Override
-    public boolean isExistFailureTaskExecutionRunnableChain() {
+    public boolean isAllTaskExecutionChainFinish() {
+        return activeTaskExecution.isEmpty();
+    }
+
+    @Override
+    public boolean isAllTaskExecutionChainSuccess() {
+        if (!isAllTaskExecutionChainFinish()) {
+            return false;
+        }
+        return !isExistFailureTaskExecutionChain()
+                && !isExistPausedTaskExecutionChain()
+                && !isExistKilledTaskExecutionChain();
+    }
+
+    @Override
+    public boolean isExistFailureTaskExecutionChain() {
         return CollectionUtils.isNotEmpty(failureTaskChains);
     }
 
     @Override
-    public boolean isExistPauseTaskExecutionRunnableChain() {
+    public boolean isExistPausedTaskExecutionChain() {
         return CollectionUtils.isNotEmpty(pausedTaskChains);
     }
 
     @Override
-    public boolean isExistKillTaskExecutionRunnableChain() {
+    public boolean isExistKilledTaskExecutionChain() {
         return CollectionUtils.isNotEmpty(killedTaskChains);
     }
 
     @Override
-    public void markTaskExecutionRunnableActive(final ITaskExecutionRunnable taskExecutionRunnable) {
-        activeTaskExecutionRunnable.add(taskExecutionRunnable.getName());
+    public void markTaskExecutionActive(final ITaskExecution taskExecution) {
+        activeTaskExecution.add(taskExecution.getName());
     }
 
     @Override
-    public void markTaskExecutionRunnableInActive(final ITaskExecutionRunnable taskExecutionRunnable) {
-        activeTaskExecutionRunnable.remove(taskExecutionRunnable.getName());
-        inActiveTaskExecutionRunnable.add(taskExecutionRunnable.getName());
+    public void markTaskExecutionInActive(final ITaskExecution taskExecution) {
+        activeTaskExecution.remove(taskExecution.getName());
+        inActiveTaskExecution.add(taskExecution.getName());
     }
 
     @Override
-    public void markTaskExecutionRunnableChainFailure(final ITaskExecutionRunnable taskExecutionRunnable) {
-        assertTaskExecutionRunnableState(taskExecutionRunnable, TaskExecutionStatus.FAILURE);
-        failureTaskChains.add(taskExecutionRunnable.getName());
+    public void markTaskExecutionChainFailure(final ITaskExecution taskExecution) {
+        assertTaskExecutionState(taskExecution, TaskExecutionStatus.FAILURE);
+        failureTaskChains.add(taskExecution.getName());
     }
 
     @Override
-    public void markTaskExecutionRunnableChainPause(final ITaskExecutionRunnable taskExecutionRunnable) {
-        assertTaskExecutionRunnableState(taskExecutionRunnable, TaskExecutionStatus.PAUSE);
-        pausedTaskChains.add(taskExecutionRunnable.getName());
+    public void markTaskExecutionChainPause(final ITaskExecution taskExecution) {
+        assertTaskExecutionState(taskExecution, TaskExecutionStatus.PAUSE);
+        pausedTaskChains.add(taskExecution.getName());
     }
 
     @Override
-    public void markTaskExecutionRunnableChainKill(final ITaskExecutionRunnable taskExecutionRunnable) {
-        assertTaskExecutionRunnableState(taskExecutionRunnable, TaskExecutionStatus.KILL);
-        killedTaskChains.add(taskExecutionRunnable.getName());
+    public void markTaskExecutionChainKill(final ITaskExecution taskExecution) {
+        assertTaskExecutionState(taskExecution, TaskExecutionStatus.KILL);
+        killedTaskChains.add(taskExecution.getName());
     }
 
     @Override
-    public void markTaskSkipped(final ITaskExecutionRunnable taskExecutionRunnable) {
-        markTaskSkipped(taskExecutionRunnable.getName());
+    public void markTaskSkipped(final ITaskExecution taskExecution) {
+        markTaskSkipped(taskExecution.getName());
     }
 
     @Override
@@ -259,31 +286,32 @@ public class WorkflowExecutionGraph implements IWorkflowExecutionGraph {
     }
 
     @Override
-    public boolean isEndOfTaskChain(final ITaskExecutionRunnable taskExecutionRunnable) {
-        return successors.get(taskExecutionRunnable.getName()).isEmpty()
-                || isTaskExecutionRunnableKilled(taskExecutionRunnable)
-                || isTaskExecutionRunnablePaused(taskExecutionRunnable)
-                || isTaskExecutionRunnableFailed(taskExecutionRunnable);
+    public boolean isEndOfTaskChain(final ITaskExecution taskExecution) {
+        return successors.get(taskExecution.getName()).isEmpty()
+                || isTaskExecutionKilled(taskExecution)
+                || isTaskExecutionPaused(taskExecution)
+                || (isTaskExecutionFailed(taskExecution)
+                        && !isAllSuccessorsAreConditionTask(taskExecution));
     }
 
     @Override
-    public boolean isTaskExecutionRunnableSkipped(final ITaskExecutionRunnable taskExecutionRunnable) {
-        return skippedTask.contains(taskExecutionRunnable.getName());
+    public boolean isTaskExecutionSkipped(final ITaskExecution taskExecution) {
+        return skippedTask.contains(taskExecution.getName());
     }
 
     @Override
-    public boolean isTaskExecutionRunnableForbidden(final ITaskExecutionRunnable taskExecutionRunnable) {
-        return (taskExecutionRunnable.getTaskDefinition().getFlag() == Flag.NO);
+    public boolean isTaskExecutionForbidden(final ITaskExecution taskExecution) {
+        return (taskExecution.getTaskDefinition().getFlag() == Flag.NO);
     }
 
     @Override
-    public boolean isTaskExecutionRunnableRetrying(final ITaskExecutionRunnable taskExecutionRunnable) {
-        if (!taskExecutionRunnable.isTaskInstanceInitialized()) {
+    public boolean isTaskExecutionRetrying(final ITaskExecution taskExecution) {
+        if (!taskExecution.isTaskInstanceInitialized()) {
             return false;
         }
-        final TaskInstance taskInstance = taskExecutionRunnable.getTaskInstance();
-        return taskInstance.getState() == TaskExecutionStatus.FAILURE && taskExecutionRunnable.isTaskInstanceCanRetry()
-                && isTaskExecutionRunnableActive(taskExecutionRunnable);
+        final TaskInstance taskInstance = taskExecution.getTaskInstance();
+        return taskInstance.getState() == TaskExecutionStatus.FAILURE && taskExecution.isTaskInstanceCanRetry()
+                && isTaskExecutionActive(taskExecution);
     }
 
     /**
@@ -291,34 +319,35 @@ public class WorkflowExecutionGraph implements IWorkflowExecutionGraph {
      * <p> Only when all predecessors are skipped, will return true. If the given task doesn't have any predecessors, will return false.
      */
     @Override
-    public boolean isAllPredecessorsSkipped(final ITaskExecutionRunnable taskExecutionRunnable) {
-        final List<ITaskExecutionRunnable> predecessors = getPredecessors(taskExecutionRunnable.getName());
+    public boolean isAllPredecessorsSkipped(final ITaskExecution taskExecution) {
+        final List<ITaskExecution> predecessors = getPredecessors(taskExecution.getName());
         if (CollectionUtils.isEmpty(predecessors)) {
             return false;
         }
         return CollectionUtils.isEmpty(predecessors)
-                || predecessors.stream().allMatch(this::isTaskExecutionRunnableSkipped);
+                || predecessors.stream().allMatch(this::isTaskExecutionSkipped);
     }
 
     @Override
-    public boolean isAllSuccessorsAreConditionTask(final ITaskExecutionRunnable taskExecutionRunnable) {
-        final List<ITaskExecutionRunnable> successors = getSuccessors(taskExecutionRunnable.getName());
+    public boolean isAllSuccessorsAreConditionTask(final ITaskExecution taskExecution) {
+        final List<ITaskExecution> successors = getSuccessors(taskExecution.getName());
         if (CollectionUtils.isEmpty(successors)) {
             return false;
         }
         return successors.stream().allMatch(
-                successor -> isTaskExecutionRunnableSkipped(successor)
-                        || TaskTypeUtils.isConditionTask(taskExecutionRunnable.getTaskInstance().getTaskType()));
+                successor -> isTaskExecutionSkipped(successor)
+                        || (TaskTypeUtils.isConditionTask(successor.getTaskDefinition().getTaskType())
+                                && !isTaskExecutionForbidden(successor)));
     }
 
-    private void assertTaskExecutionRunnableState(final ITaskExecutionRunnable taskExecutionRunnable,
-                                                  final TaskExecutionStatus taskExecutionStatus) {
-        final TaskInstance taskInstance = taskExecutionRunnable.getTaskInstance();
+    private void assertTaskExecutionState(final ITaskExecution taskExecution,
+                                          final TaskExecutionStatus taskExecutionStatus) {
+        final TaskInstance taskInstance = taskExecution.getTaskInstance();
         if (taskInstance.getState() == taskExecutionStatus) {
             return;
         }
         throw new IllegalStateException(
-                "The task: " + taskExecutionRunnable.getName() + " state: " + taskInstance.getState() + " is not "
+                "The task: " + taskExecution.getName() + " state: " + taskInstance.getState() + " is not "
                         + taskExecutionStatus);
     }
 

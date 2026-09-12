@@ -19,12 +19,12 @@ package org.apache.dolphinscheduler.server.master.engine.task.lifecycle.event;
 
 import static com.google.common.base.Preconditions.checkState;
 
-import org.apache.dolphinscheduler.dao.entity.TaskDefinition;
 import org.apache.dolphinscheduler.dao.entity.TaskInstance;
+import org.apache.dolphinscheduler.plugin.task.api.enums.TaskTimeoutStrategy;
 import org.apache.dolphinscheduler.server.master.engine.ILifecycleEventType;
+import org.apache.dolphinscheduler.server.master.engine.task.execution.ITaskExecution;
 import org.apache.dolphinscheduler.server.master.engine.task.lifecycle.AbstractTaskLifecycleEvent;
 import org.apache.dolphinscheduler.server.master.engine.task.lifecycle.TaskLifecycleEventType;
-import org.apache.dolphinscheduler.server.master.engine.task.runnable.ITaskExecutionRunnable;
 
 import java.util.concurrent.TimeUnit;
 
@@ -33,25 +33,29 @@ import lombok.Getter;
 @Getter
 public class TaskTimeoutLifecycleEvent extends AbstractTaskLifecycleEvent {
 
-    private final ITaskExecutionRunnable taskExecutionRunnable;
+    private final ITaskExecution taskExecution;
 
-    protected TaskTimeoutLifecycleEvent(final ITaskExecutionRunnable taskExecutionRunnable,
+    private final TaskTimeoutStrategy timeoutStrategy;
+
+    protected TaskTimeoutLifecycleEvent(final ITaskExecution taskExecution,
+                                        final TaskTimeoutStrategy timeoutStrategy,
                                         final long timeout) {
         super(timeout);
-        this.taskExecutionRunnable = taskExecutionRunnable;
+        this.timeoutStrategy = timeoutStrategy;
+        this.taskExecution = taskExecution;
     }
 
-    public static TaskTimeoutLifecycleEvent of(final ITaskExecutionRunnable taskExecutionRunnable) {
-        final TaskDefinition taskDefinition = taskExecutionRunnable.getTaskDefinition();
-        final TaskInstance taskInstance = taskExecutionRunnable.getTaskInstance();
-        checkState(taskDefinition != null, "The task instance must be initialized before retrying.");
+    public static TaskTimeoutLifecycleEvent of(final ITaskExecution taskExecution,
+                                               final TaskTimeoutStrategy timeoutStrategy,
+                                               final long timeoutInMinutes) {
+        final TaskInstance taskInstance = taskExecution.getTaskInstance();
 
-        final int timeout = taskDefinition.getTimeout();
-        checkState(timeout >= 0, "The task timeout: %s must >=0 minutes", timeout);
+        checkState(timeoutStrategy != null, "The task timeoutStrategy must not be null");
+        checkState(timeoutInMinutes > 0, "The task timeout: %s must > 0 minutes", timeoutInMinutes);
 
         long delayTime = System.currentTimeMillis() - taskInstance.getSubmitTime().getTime()
-                + TimeUnit.MINUTES.toMillis(timeout);
-        return new TaskTimeoutLifecycleEvent(taskExecutionRunnable, delayTime);
+                + TimeUnit.MINUTES.toMillis(timeoutInMinutes);
+        return new TaskTimeoutLifecycleEvent(taskExecution, timeoutStrategy, delayTime);
     }
 
     @Override
@@ -62,7 +66,7 @@ public class TaskTimeoutLifecycleEvent extends AbstractTaskLifecycleEvent {
     @Override
     public String toString() {
         return "TaskRetryEvent{" +
-                "task=" + taskExecutionRunnable.getName() +
+                "task=" + taskExecution.getName() +
                 ", timeout=" + delayTime +
                 '}';
     }

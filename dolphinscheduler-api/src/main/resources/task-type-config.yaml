@@ -24,6 +24,7 @@ task:
     - 'SQL'
     - 'SPARK'
     - 'FLINK'
+    - 'GRPC'
     - 'HTTP'
     - 'MR'
     - 'DINKY'
@@ -32,6 +33,7 @@ task:
     - 'REMOTESHELL'
   cloud:
     - 'EMR'
+    - 'EMR_SERVERLESS'
     - 'K8S'
     - 'DMS'
     - 'DATA_FACTORY'
@@ -51,7 +53,6 @@ task:
     - 'OPENMLDB'
     - 'DVC'
     - 'SAGEMAKER'
-    - 'PYTORCH'
     - 'KUBEFLOW'
   other:
     - 'ZEPPELIN'

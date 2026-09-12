@@ -41,6 +41,8 @@ public class WorkflowBackFillRequest {
 
     private User loginUser;
 
+    private long projectCode;
+
     private long workflowDefinitionCode;
 
     private String startNodes;
@@ -66,8 +68,6 @@ public class WorkflowBackFillRequest {
     private String startParamList;
 
     private Flag dryRun;
-
-    private Flag testFlag;
 
     private RunMode backfillRunMode;
 

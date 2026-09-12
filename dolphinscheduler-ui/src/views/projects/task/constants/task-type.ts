@@ -24,6 +24,7 @@ export type TaskType =
   | 'MR'
   | 'PYTHON'
   | 'DEPENDENT'
+  | 'GRPC'
   | 'HTTP'
   | 'DATAX'
   | 'SQOOP'
@@ -31,6 +32,7 @@ export type TaskType =
   | 'SWITCH'
   | 'SEATUNNEL'
   | 'EMR'
+  | 'EMR_SERVERLESS'
   | 'ZEPPELIN'
   | 'K8S'
   | 'JUPYTER'
@@ -42,7 +44,6 @@ export type TaskType =
   | 'SAGEMAKER'
   | 'CHUNJUN'
   | 'FLINK_STREAM'
-  | 'PYTORCH'
   | 'HIVECLI'
   | 'DMS'
   | 'DATASYNC'
@@ -86,6 +87,10 @@ export const TASK_TYPES_MAP = {
   DEPENDENT: {
     alias: 'DEPENDENT'
   },
+  GRPC: {
+    alias: 'GRPC',
+    helperLinkDisable: true
+  },
   HTTP: {
     alias: 'HTTP'
   },
@@ -108,6 +113,10 @@ export const TASK_TYPES_MAP = {
   },
   EMR: {
     alias: 'AmazonEMR',
+    helperLinkDisable: true
+  },
+  EMR_SERVERLESS: {
+    alias: 'AmazonEMRServerless',
     helperLinkDisable: true
   },
   ZEPPELIN: {
@@ -150,10 +159,6 @@ export const TASK_TYPES_MAP = {
     alias: 'FLINK_STREAM',
     helperLinkDisable: true,
     taskExecuteType: 'STREAM'
-  },
-  PYTORCH: {
-    alias: 'Pytorch',
-    helperLinkDisable: true
   },
   HIVECLI: {
     alias: 'HIVECLI',

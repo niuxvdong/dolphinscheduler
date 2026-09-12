@@ -43,6 +43,7 @@ type IDataBase =
   | 'SAGEMAKER'
   | 'K8S'
   | 'ALIYUN_SERVERLESS_SPARK'
+  | 'DOLPHINDB'
 
 type IDataBaseLabel =
   | 'MYSQL'
@@ -67,6 +68,7 @@ type IDataBaseLabel =
   | 'SAGEMAKER'
   | 'K8S'
   | 'ALIYUN_SERVERLESS_SPARK'
+  | 'DOLPHINDB'
 
 interface IDataSource {
   id?: number
@@ -93,7 +95,7 @@ interface IDataSource {
   MSIClientId?: string
   dbUser?: string
   compatibleMode?: string
-  publicKey?: string
+  privateKey?: string
   datawarehouse?: string
   accessKeyId?: string
   accessKeySecret?: string

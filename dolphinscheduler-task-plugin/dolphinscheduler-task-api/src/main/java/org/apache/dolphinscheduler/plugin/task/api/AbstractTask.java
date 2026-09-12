@@ -23,8 +23,6 @@ import org.apache.dolphinscheduler.plugin.task.api.model.TaskAlertInfo;
 import org.apache.dolphinscheduler.plugin.task.api.parameters.AbstractParameters;
 
 import java.util.Map;
-import java.util.StringJoiner;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.regex.Matcher;
 
 import lombok.Getter;
@@ -143,24 +141,12 @@ public abstract class AbstractTask {
         if (exitStatusCode == TaskConstants.EXIT_CODE_SUCCESS) {
             return TaskExecutionStatus.SUCCESS;
         }
-        if (exitStatusCode == TaskConstants.EXIT_CODE_KILL || exitStatusCode == TaskConstants.EXIT_CODE_HARD_KILL) {
+        if (exitStatusCode == TaskConstants.EXIT_CODE_KILL
+                || exitStatusCode == TaskConstants.EXIT_CODE_HARD_KILL
+                || exitStatusCode == TaskConstants.EXIT_CODE_SIGINT_KILL) {
             return TaskExecutionStatus.KILL;
         }
         return TaskExecutionStatus.FAILURE;
-    }
-
-    /**
-     * log handle
-     *
-     * @param logs log list
-     */
-    public void logHandle(LinkedBlockingQueue<String> logs) {
-
-        StringJoiner joiner = new StringJoiner("\n\t");
-        while (!logs.isEmpty()) {
-            joiner.add(logs.poll());
-        }
-        log.info(" -> {}", joiner);
     }
 
     /**

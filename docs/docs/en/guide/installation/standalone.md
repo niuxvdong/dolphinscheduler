@@ -16,7 +16,7 @@ If you want to deploy DolphinScheduler in production, we recommend you follow [c
 
 ## Download Plugin Dependencies
 
-Please refer to the [Download Plugin Dependencies](../installation/pseudo-cluster.md) in pseudo-cluster deployment.
+Please refer to the [Download Plugin Dependencies](../installation/pseudo-cluster.md) in pseudo-cluster deployment. Note that standalone minimal operation requires downloading plugin dependencies `dolphinscheduler-task-shell` and `dolphinscheduler-storage-hdfs`.
 
 ### Configure User Exemption and Permissions
 
@@ -30,7 +30,7 @@ useradd dolphinscheduler
 echo "dolphinscheduler" | passwd --stdin dolphinscheduler
 
 # Configure sudo without password
-sed -i '$adolphinscheduler  ALL=(ALL)  NOPASSWD: NOPASSWD: ALL' /etc/sudoers
+sed -i '$dolphinscheduler  ALL=(ALL)  NOPASSWD: ALL' /etc/sudoers
 sed -i 's/Defaults    requiretty/#Defaults    requiretty/g' /etc/sudoers
 
 # Modify directory permissions and grant permissions for user you created above

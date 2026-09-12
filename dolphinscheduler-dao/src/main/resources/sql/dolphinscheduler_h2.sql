@@ -334,7 +334,6 @@ CREATE TABLE t_ds_command
     dry_run                    int NULL DEFAULT 0,
     workflow_instance_id        int(11) DEFAULT 0,
     workflow_definition_version int(11) DEFAULT 0,
-    test_flag                  int NULL DEFAULT 0,
     PRIMARY KEY (id),
     KEY                        priority_id_index (workflow_instance_priority, id)
 );
@@ -343,6 +342,27 @@ CREATE TABLE t_ds_command
 -- Records of t_ds_command
 -- ----------------------------
 
+-- ----------------------------
+-- Table structure for t_ds_serial_command
+-- ----------------------------
+DROP TABLE IF EXISTS `t_ds_serial_command`;
+CREATE TABLE `t_ds_serial_command` (
+   `id` int(11) NOT NULL AUTO_INCREMENT COMMENT 'primary key',
+   `workflow_definition_code` bigint(20) NOT NULL COMMENT 'workflow definition code',
+   `workflow_definition_version` int(11) NOT NULL COMMENT 'workflow definition code',
+   `workflow_instance_id` bigint(20) NOT NULL COMMENT 'workflow instance id',
+   `state` tinyint(4) NOT NULL DEFAULT 0 COMMENT 'state of the serial queue: 0 waiting, 1 fired',
+   `command` text COMMENT 'command json',
+   `create_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'create time',
+   `update_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'update time',
+   PRIMARY KEY (`id`),
+   KEY `idx_workflow_instance_id` (`workflow_instance_id`)
+);
+
+-- ----------------------------
+-- Table structure for t_ds_serial_command
+-- ----------------------------
+    
 -- ----------------------------
 -- Table structure for t_ds_datasource
 -- ----------------------------
@@ -391,7 +411,6 @@ CREATE TABLE t_ds_error_command
     dry_run                    int NULL DEFAULT 0,
     workflow_instance_id        int(11) DEFAULT 0,
     workflow_definition_version int(11) DEFAULT 0,
-    test_flag                  int NULL DEFAULT 0,
     PRIMARY KEY (id)
 );
 
@@ -423,7 +442,7 @@ CREATE TABLE t_ds_workflow_definition
     update_time      datetime     DEFAULT NULL,
     PRIMARY KEY (id),
     UNIQUE KEY workflow_unique (name,project_code) USING BTREE,
-    UNIQUE KEY code_unique (code)
+    UNIQUE KEY uniq_workflow_definition_code (code)
 );
 
 -- ----------------------------
@@ -617,8 +636,8 @@ CREATE TABLE t_ds_workflow_instance
     var_pool                   longtext,
     dry_run                    int NULL DEFAULT 0,
     restart_time               datetime     DEFAULT NULL,
-    test_flag                  int NULL DEFAULT 0,
-    PRIMARY KEY (id)
+    PRIMARY KEY (id),
+    INDEX idx_project_start_time (project_code ASC, start_time DESC)
 );
 
 -- ----------------------------
@@ -839,6 +858,7 @@ CREATE TABLE t_ds_schedules
     end_time                  datetime     NOT NULL,
     timezone_id               varchar(40) DEFAULT NULL,
     crontab                   varchar(255) NOT NULL,
+    missed_fire_policy        tinyint NOT NULL DEFAULT 2,
     failure_strategy          tinyint(4) NOT NULL,
     user_id                   int(11) NOT NULL,
     release_state             tinyint(4) NOT NULL,
@@ -850,7 +870,8 @@ CREATE TABLE t_ds_schedules
     environment_code          bigint(20) DEFAULT '-1',
     create_time               datetime     NOT NULL,
     update_time               datetime     NOT NULL,
-    PRIMARY KEY (id)
+    PRIMARY KEY (id),
+    UNIQUE KEY `uniq_schedules_workflow_definition_code` (`workflow_definition_code`)
 );
 
 -- ----------------------------
@@ -917,8 +938,8 @@ CREATE TABLE t_ds_task_instance
     dry_run                 int NULL DEFAULT 0,
     cpu_quota               int(11) DEFAULT '-1' NOT NULL,
     memory_max              int(11) DEFAULT '-1' NOT NULL,
-    test_flag               int NULL DEFAULT 0,
-    PRIMARY KEY (id)
+    PRIMARY KEY (id),
+    INDEX idx_project_submit_time (project_code ASC, submit_time DESC)
 );
 
 -- ----------------------------

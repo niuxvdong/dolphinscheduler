@@ -17,9 +17,11 @@
 
 package org.apache.dolphinscheduler.api.service;
 
+import static org.apache.dolphinscheduler.api.AssertionsHelper.assertThrowsServiceException;
 import static org.apache.dolphinscheduler.api.constants.ApiFuncIdentificationConstant.TASK_DEFINITION;
-import static org.apache.dolphinscheduler.api.constants.ApiFuncIdentificationConstant.WORKFLOW_SWITCH_TO_THIS_VERSION;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.doNothing;
@@ -28,6 +30,8 @@ import static org.mockito.Mockito.when;
 
 import org.apache.dolphinscheduler.api.enums.Status;
 import org.apache.dolphinscheduler.api.exceptions.ServiceException;
+import org.apache.dolphinscheduler.api.permission.TaskDatasourcePermissionChecker;
+import org.apache.dolphinscheduler.api.permission.TaskSubWorkflowPermissionChecker;
 import org.apache.dolphinscheduler.api.service.impl.ProjectServiceImpl;
 import org.apache.dolphinscheduler.api.service.impl.TaskDefinitionServiceImpl;
 import org.apache.dolphinscheduler.common.constants.Constants;
@@ -43,24 +47,23 @@ import org.apache.dolphinscheduler.dao.entity.WorkflowDefinition;
 import org.apache.dolphinscheduler.dao.entity.WorkflowDefinitionLog;
 import org.apache.dolphinscheduler.dao.entity.WorkflowTaskRelation;
 import org.apache.dolphinscheduler.dao.entity.WorkflowTaskRelationLog;
-import org.apache.dolphinscheduler.dao.mapper.ProjectMapper;
 import org.apache.dolphinscheduler.dao.mapper.TaskDefinitionLogMapper;
 import org.apache.dolphinscheduler.dao.mapper.TaskDefinitionMapper;
 import org.apache.dolphinscheduler.dao.mapper.WorkflowDefinitionLogMapper;
 import org.apache.dolphinscheduler.dao.mapper.WorkflowDefinitionMapper;
 import org.apache.dolphinscheduler.dao.mapper.WorkflowTaskRelationLogMapper;
 import org.apache.dolphinscheduler.dao.mapper.WorkflowTaskRelationMapper;
-import org.apache.dolphinscheduler.dao.repository.WorkflowTaskRelationLogDao;
-import org.apache.dolphinscheduler.plugin.task.api.TaskPluginManager;
+import org.apache.dolphinscheduler.dao.repository.ProjectDao;
+import org.apache.dolphinscheduler.dao.repository.TaskDefinitionDao;
+import org.apache.dolphinscheduler.dao.repository.WorkflowDefinitionDao;
+import org.apache.dolphinscheduler.dao.repository.WorkflowTaskRelationDao;
 import org.apache.dolphinscheduler.service.process.ProcessService;
 import org.apache.dolphinscheduler.service.process.ProcessServiceImpl;
 
-import java.text.MessageFormat;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -68,7 +71,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -85,10 +87,13 @@ public class TaskDefinitionServiceImplTest {
     private TaskDefinitionMapper taskDefinitionMapper;
 
     @Mock
+    private TaskDefinitionDao taskDefinitionDao;
+
+    @Mock
     private TaskDefinitionLogMapper taskDefinitionLogMapper;
 
     @Mock
-    private ProjectMapper projectMapper;
+    private ProjectDao projectDao;
 
     @Mock
     private ProjectServiceImpl projectService;
@@ -103,29 +108,31 @@ public class TaskDefinitionServiceImplTest {
     private WorkflowDefinitionLogMapper workflowDefinitionLogMapper;
 
     @Mock
+    private TaskDatasourcePermissionChecker taskDatasourcePermissionChecker;
+
+    @Mock
+    private TaskSubWorkflowPermissionChecker taskSubWorkflowPermissionChecker;
+
+    @Mock
     private WorkflowTaskRelationLogMapper workflowTaskRelationLogMapper;
 
     @Mock
     private WorkflowTaskRelationMapper workflowTaskRelationMapper;
 
     @Mock
-    private WorkflowTaskRelationService workflowTaskRelationService;
+    private WorkflowTaskRelationDao workflowTaskRelationDao;
 
     @Mock
     private WorkflowDefinitionMapper workflowDefinitionMapper;
 
     @Mock
-    private WorkflowDefinitionService workflowDefinitionService;
-
-    @Mock
-    private WorkflowTaskRelationLogDao workflowTaskRelationLogDao;
+    private WorkflowDefinitionDao workflowDefinitionDao;
 
     private static final String TASK_PARAMETER =
             "{\"resourceList\":[],\"localParams\":[],\"rawScript\":\"echo 1\",\"conditionResult\":{\"successNode\":[\"\"],\"failedNode\":[\"\"]},\"dependence\":{}}";;
     private static final long PROJECT_CODE = 1L;
     private static final long PROCESS_DEFINITION_CODE = 2L;
     private static final long TASK_CODE = 3L;
-    private static final String UPSTREAM_CODE = "3,5";
     private static final int VERSION = 1;
     private static final int RESOURCE_RATE = -1;
     protected User user;
@@ -145,54 +152,102 @@ public class TaskDefinitionServiceImplTest {
     public void queryTaskDefinitionByName() {
         String taskName = "task";
         Project project = getProject();
-        when(projectMapper.queryByCode(PROJECT_CODE)).thenReturn(project);
+        when(projectDao.queryByCode(PROJECT_CODE)).thenReturn(project);
+        Mockito.doNothing().when(projectService)
+                .checkProjectAndAuthThrowException(user, project, TASK_DEFINITION);
 
-        Map<String, Object> result = new HashMap<>();
-        putMsg(result, Status.SUCCESS, PROJECT_CODE);
-        when(projectService.checkProjectAndAuth(user, project, PROJECT_CODE, TASK_DEFINITION))
-                .thenReturn(result);
-
-        when(taskDefinitionMapper.queryByName(project.getCode(), PROCESS_DEFINITION_CODE, taskName))
+        when(taskDefinitionDao.queryByName(project.getCode(), PROCESS_DEFINITION_CODE, taskName))
                 .thenReturn(new TaskDefinition());
 
-        Map<String, Object> relation = taskDefinitionService
+        TaskDefinition taskDefinition = taskDefinitionService
                 .queryTaskDefinitionByName(user, PROJECT_CODE, PROCESS_DEFINITION_CODE, taskName);
 
-        assertEquals(Status.SUCCESS, relation.get(Constants.STATUS));
+        Assertions.assertNotNull(taskDefinition);
     }
 
     @Test
     public void switchVersion() {
         Project project = getProject();
-        when(projectMapper.queryByCode(PROJECT_CODE)).thenReturn(project);
-
-        Map<String, Object> result = new HashMap<>();
-
-        putMsg(result, Status.SUCCESS, PROJECT_CODE);
-        when(
-                projectService.checkProjectAndAuth(user, project, PROJECT_CODE, WORKFLOW_SWITCH_TO_THIS_VERSION))
-                        .thenReturn(result);
+        when(projectDao.queryByCode(PROJECT_CODE)).thenReturn(project);
+        Mockito.doNothing().when(projectService).checkHasProjectWritePermissionThrowException(user, project);
 
         when(taskDefinitionLogMapper.queryByDefinitionCodeAndVersion(TASK_CODE, VERSION))
                 .thenReturn(new TaskDefinitionLog());
         TaskDefinition taskDefinition = new TaskDefinition();
         taskDefinition.setProjectCode(PROJECT_CODE);
-        when(taskDefinitionMapper.queryByCode(TASK_CODE))
+        when(taskDefinitionDao.queryByCode(TASK_CODE))
                 .thenReturn(taskDefinition);
-        when(taskDefinitionMapper.updateById(new TaskDefinitionLog())).thenReturn(1);
-        Map<String, Object> relation = taskDefinitionService
-                .switchVersion(user, PROJECT_CODE, TASK_CODE, VERSION);
+        when(taskDefinitionDao.updateById(any(TaskDefinitionLog.class))).thenReturn(true);
 
-        assertEquals(Status.SUCCESS, relation.get(Constants.STATUS));
+        Assertions.assertDoesNotThrow(
+                () -> taskDefinitionService.switchVersion(user, PROJECT_CODE, TASK_CODE, VERSION));
     }
 
-    private void putMsg(Map<String, Object> result, Status status, Object... statusParams) {
-        result.put(Constants.STATUS, status);
-        if (statusParams != null && statusParams.length > 0) {
-            result.put(Constants.MSG, MessageFormat.format(status.getMsg(), statusParams));
-        } else {
-            result.put(Constants.MSG, status.getMsg());
-        }
+    @Test
+    public void switchVersionShouldRejectUnauthorizedDatasource() {
+        Project project = getProject();
+        when(projectDao.queryByCode(PROJECT_CODE)).thenReturn(project);
+        Mockito.doNothing().when(projectService).checkHasProjectWritePermissionThrowException(user, project);
+
+        TaskDefinition taskDefinition = new TaskDefinition();
+        taskDefinition.setProjectCode(PROJECT_CODE);
+        when(taskDefinitionDao.queryByCode(TASK_CODE)).thenReturn(taskDefinition);
+        when(taskDefinitionLogMapper.queryByDefinitionCodeAndVersion(TASK_CODE, VERSION))
+                .thenReturn(new TaskDefinitionLog());
+        doThrow(new ServiceException(Status.RESOURCE_NOT_EXIST_OR_NO_PERMISSION))
+                .when(taskDatasourcePermissionChecker).checkPermission(eq(user), anyList());
+
+        assertThrowsServiceException(Status.RESOURCE_NOT_EXIST_OR_NO_PERMISSION,
+                () -> taskDefinitionService.switchVersion(user, PROJECT_CODE, TASK_CODE, VERSION));
+
+        Mockito.verify(taskDefinitionDao, Mockito.never()).updateById(any(TaskDefinition.class));
+    }
+
+    @Test
+    public void switchVersionShouldRejectUnavailableSubWorkflow() {
+        Project project = getProject();
+        when(projectDao.queryByCode(PROJECT_CODE)).thenReturn(project);
+        Mockito.doNothing().when(projectService).checkHasProjectWritePermissionThrowException(user, project);
+
+        TaskDefinition taskDefinition = new TaskDefinition();
+        taskDefinition.setProjectCode(PROJECT_CODE);
+        when(taskDefinitionDao.queryByCode(TASK_CODE)).thenReturn(taskDefinition);
+        when(taskDefinitionLogMapper.queryByDefinitionCodeAndVersion(TASK_CODE, VERSION))
+                .thenReturn(new TaskDefinitionLog());
+        doThrow(new ServiceException(Status.RESOURCE_NOT_EXIST_OR_NO_PERMISSION))
+                .when(taskSubWorkflowPermissionChecker).checkPermission(eq(user), anyList());
+
+        assertThrowsServiceException(Status.RESOURCE_NOT_EXIST_OR_NO_PERMISSION,
+                () -> taskDefinitionService.switchVersion(user, PROJECT_CODE, TASK_CODE, VERSION));
+
+        Mockito.verify(taskDefinitionDao, Mockito.never()).updateById(any(TaskDefinition.class));
+    }
+
+    @Test
+    public void deleteByCodeAndVersion() {
+        Project project = getProject();
+        when(projectDao.queryByCode(PROJECT_CODE)).thenReturn(project);
+        Mockito.doNothing().when(projectService).checkHasProjectWritePermissionThrowException(eq(user), eq(project));
+
+        // cross-project privilege escalation: taskCode belongs to another project - must be rejected
+        TaskDefinition otherProjectTask = new TaskDefinition();
+        otherProjectTask.setProjectCode(PROJECT_CODE + 1);
+        otherProjectTask.setCode(TASK_CODE);
+        otherProjectTask.setVersion(VERSION + 1);
+        when(taskDefinitionDao.queryByCode(TASK_CODE)).thenReturn(otherProjectTask);
+        assertThrowsServiceException(Status.TASK_DEFINE_NOT_EXIST,
+                () -> taskDefinitionService.deleteByCodeAndVersion(user, PROJECT_CODE, TASK_CODE, VERSION));
+        Mockito.verify(taskDefinitionLogMapper, Mockito.never()).deleteByCodeAndVersion(TASK_CODE, VERSION);
+
+        // normal path: taskCode belongs to the project - should succeed
+        TaskDefinition taskDefinition = new TaskDefinition();
+        taskDefinition.setProjectCode(PROJECT_CODE);
+        taskDefinition.setCode(TASK_CODE);
+        taskDefinition.setVersion(VERSION + 1);
+        when(taskDefinitionDao.queryByCode(TASK_CODE)).thenReturn(taskDefinition);
+        when(taskDefinitionLogMapper.deleteByCodeAndVersion(TASK_CODE, VERSION)).thenReturn(1);
+        Assertions.assertDoesNotThrow(
+                () -> taskDefinitionService.deleteByCodeAndVersion(user, PROJECT_CODE, TASK_CODE, VERSION));
     }
 
     @Test
@@ -231,25 +286,21 @@ public class TaskDefinitionServiceImplTest {
 
     @Test
     public void genTaskCodeList() {
-        Map<String, Object> genTaskCodeList = taskDefinitionService.genTaskCodeList(10);
-        assertEquals(Status.SUCCESS, genTaskCodeList.get(Constants.STATUS));
+        List<Long> taskCodes = taskDefinitionService.genTaskCodeList(10);
+        assertEquals(10, taskCodes.size());
     }
 
     @Test
     public void testReleaseTaskDefinition() {
-        when(projectMapper.queryByCode(PROJECT_CODE)).thenReturn(getProject());
+        when(projectDao.queryByCode(PROJECT_CODE)).thenReturn(getProject());
         Project project = getProject();
+        Mockito.doNothing().when(projectService).checkHasProjectWritePermissionThrowException(user, project);
 
         // check task dose not exist
-        Map<String, Object> result = new HashMap<>();
-        putMsg(result, Status.TASK_DEFINE_NOT_EXIST, TASK_CODE);
-        when(projectService.checkProjectAndAuth(user, project, PROJECT_CODE, null)).thenReturn(result);
-        Map<String, Object> map =
-                taskDefinitionService.releaseTaskDefinition(user, PROJECT_CODE, TASK_CODE, ReleaseState.OFFLINE);
-        assertEquals(Status.TASK_DEFINE_NOT_EXIST, map.get(Constants.STATUS));
+        assertThrowsServiceException(Status.TASK_DEFINE_NOT_EXIST,
+                () -> taskDefinitionService.releaseTaskDefinition(user, PROJECT_CODE, TASK_CODE, ReleaseState.OFFLINE));
 
         // process definition offline
-        putMsg(result, Status.SUCCESS);
         TaskDefinition taskDefinition = new TaskDefinition();
         taskDefinition.setProjectCode(PROJECT_CODE);
         taskDefinition.setVersion(1);
@@ -258,23 +309,62 @@ public class TaskDefinitionServiceImplTest {
                 "{\"resourceList\":[],\"localParams\":[],\"rawScript\":\"echo 1\",\"conditionResult\":{\"successNode\":[\"\"],\"failedNode\":[\"\"]},\"dependence\":{}}";
         taskDefinition.setTaskParams(params);
         taskDefinition.setTaskType("SHELL");
-        when(taskDefinitionMapper.queryByCode(TASK_CODE)).thenReturn(taskDefinition);
+        when(taskDefinitionDao.queryByCode(TASK_CODE)).thenReturn(taskDefinition);
         TaskDefinitionLog taskDefinitionLog = new TaskDefinitionLog(taskDefinition);
         when(taskDefinitionLogMapper.queryByDefinitionCodeAndVersion(TASK_CODE, taskDefinition.getVersion()))
                 .thenReturn(taskDefinitionLog);
-        Map<String, Object> offlineTaskResult =
-                taskDefinitionService.releaseTaskDefinition(user, PROJECT_CODE, TASK_CODE, ReleaseState.OFFLINE);
-        assertEquals(Status.SUCCESS, offlineTaskResult.get(Constants.STATUS));
+        Assertions.assertDoesNotThrow(() -> taskDefinitionService.releaseTaskDefinition(user, PROJECT_CODE, TASK_CODE,
+                ReleaseState.OFFLINE));
 
         // process definition online, resource exist
-        Map<String, Object> onlineTaskResult =
-                taskDefinitionService.releaseTaskDefinition(user, PROJECT_CODE, TASK_CODE, ReleaseState.ONLINE);
-        assertEquals(Status.SUCCESS, onlineTaskResult.get(Constants.STATUS));
+        Assertions.assertDoesNotThrow(() -> taskDefinitionService.releaseTaskDefinition(user, PROJECT_CODE, TASK_CODE,
+                ReleaseState.ONLINE));
 
         // release error code
-        Map<String, Object> failResult =
-                taskDefinitionService.releaseTaskDefinition(user, PROJECT_CODE, TASK_CODE, ReleaseState.getEnum(2));
-        assertEquals(Status.REQUEST_PARAMS_NOT_VALID_ERROR, failResult.get(Constants.STATUS));
+        assertThrowsServiceException(Status.REQUEST_PARAMS_NOT_VALID_ERROR,
+                () -> taskDefinitionService.releaseTaskDefinition(user, PROJECT_CODE, TASK_CODE,
+                        ReleaseState.getEnum(2)));
+    }
+
+    @Test
+    public void releaseTaskDefinitionShouldRejectUnavailableSubWorkflow() {
+        Project project = getProject();
+        when(projectDao.queryByCode(PROJECT_CODE)).thenReturn(project);
+        Mockito.doNothing().when(projectService).checkHasProjectWritePermissionThrowException(user, project);
+
+        TaskDefinition taskDefinition = new TaskDefinition();
+        taskDefinition.setProjectCode(PROJECT_CODE);
+        taskDefinition.setVersion(VERSION);
+        taskDefinition.setCode(TASK_CODE);
+        when(taskDefinitionDao.queryByCode(TASK_CODE)).thenReturn(taskDefinition);
+        TaskDefinitionLog taskDefinitionLog = new TaskDefinitionLog();
+        when(taskDefinitionLogMapper.queryByDefinitionCodeAndVersion(TASK_CODE, VERSION))
+                .thenReturn(taskDefinitionLog);
+        doThrow(new ServiceException(Status.RESOURCE_NOT_EXIST_OR_NO_PERMISSION))
+                .when(taskSubWorkflowPermissionChecker).checkPermission(eq(user), anyList());
+
+        assertThrowsServiceException(Status.RESOURCE_NOT_EXIST_OR_NO_PERMISSION,
+                () -> taskDefinitionService.releaseTaskDefinition(
+                        user, PROJECT_CODE, TASK_CODE, ReleaseState.ONLINE));
+
+        Mockito.verify(taskDefinitionDao, Mockito.never()).updateById(any(TaskDefinition.class));
+        Mockito.verify(taskDefinitionLogMapper, Mockito.never()).updateById(any(TaskDefinitionLog.class));
+    }
+
+    @Test
+    public void testReadOnlyUserCannotChangeTaskDefinition() {
+        Project project = getProject();
+        when(projectDao.queryByCode(PROJECT_CODE)).thenReturn(project);
+        doThrow(new ServiceException(Status.USER_NO_WRITE_PROJECT_PERM))
+                .when(projectService).checkHasProjectWritePermissionThrowException(user, project);
+
+        assertThrowsServiceException(Status.USER_NO_WRITE_PROJECT_PERM,
+                () -> taskDefinitionService.switchVersion(user, PROJECT_CODE, TASK_CODE, VERSION));
+        assertThrowsServiceException(Status.USER_NO_WRITE_PROJECT_PERM,
+                () -> taskDefinitionService.releaseTaskDefinition(
+                        user, PROJECT_CODE, TASK_CODE, ReleaseState.ONLINE));
+
+        Mockito.verifyNoInteractions(taskDefinitionDao, taskDefinitionLogMapper);
     }
 
     @Test
@@ -287,7 +377,7 @@ public class TaskDefinitionServiceImplTest {
         ArrayList<TaskDefinitionLog> taskDefinitionLogs = new ArrayList<>();
         taskDefinitionLogs.add(taskDefinitionLog);
         int version = 1;
-        when(workflowDefinitionMapper.queryByCode(isA(long.class))).thenReturn(workflowDefinition);
+        when(workflowDefinitionDao.queryByCode(isA(long.class))).thenReturn(Optional.of(workflowDefinition));
 
         // saveWorkflowDefine
         when(workflowDefinitionLogMapper.queryMaxVersionForDefinition(isA(long.class))).thenReturn(version);
@@ -322,8 +412,8 @@ public class TaskDefinitionServiceImplTest {
         assertEquals(Status.TASK_DEFINE_NOT_EXIST.getCode(), ((ServiceException) exception).getCode());
 
         // error task definition not exists
-        when(taskDefinitionMapper.queryByCode(TASK_CODE)).thenReturn(getTaskDefinition());
-        when(projectMapper.queryByCode(PROJECT_CODE)).thenReturn(getProject());
+        when(taskDefinitionDao.queryByCode(TASK_CODE)).thenReturn(getTaskDefinition());
+        when(projectDao.queryByCode(PROJECT_CODE)).thenReturn(getProject());
         doThrow(new ServiceException(Status.USER_NO_OPERATION_PROJECT_PERM)).when(projectService)
                 .checkProjectAndAuthThrowException(user, getProject(), TASK_DEFINITION);
         exception = Assertions.assertThrows(ServiceException.class,
@@ -334,58 +424,6 @@ public class TaskDefinitionServiceImplTest {
         // success
         doNothing().when(projectService).checkProjectAndAuthThrowException(user, getProject(), TASK_DEFINITION);
         Assertions.assertDoesNotThrow(() -> taskDefinitionService.getTaskDefinition(user, TASK_CODE));
-    }
-
-    @Test
-    public void testUpdateTaskWithUpstream() {
-        try (
-                MockedStatic<TaskPluginManager> taskPluginManagerMockedStatic =
-                        Mockito.mockStatic(TaskPluginManager.class)) {
-            taskPluginManagerMockedStatic
-                    .when(() -> TaskPluginManager.checkTaskParameters(Mockito.any(), Mockito.any()))
-                    .thenReturn(true);
-            String taskDefinitionJson = getTaskDefinitionJson();
-            TaskDefinition taskDefinition = getTaskDefinition();
-            taskDefinition.setFlag(Flag.NO);
-            TaskDefinition taskDefinitionSecond = getTaskDefinition();
-            taskDefinitionSecond.setCode(5);
-
-            user.setUserType(UserType.ADMIN_USER);
-            when(projectMapper.queryByCode(PROJECT_CODE)).thenReturn(getProject());
-            when(projectService.hasProjectAndWritePerm(user, getProject(), new HashMap<>())).thenReturn(true);
-            when(taskDefinitionMapper.queryByCode(TASK_CODE)).thenReturn(taskDefinition);
-            when(taskDefinitionLogMapper.queryMaxVersionForDefinition(TASK_CODE)).thenReturn(1);
-            when(taskDefinitionMapper.updateById(Mockito.any())).thenReturn(1);
-            when(taskDefinitionLogMapper.insert(Mockito.any())).thenReturn(1);
-
-            when(taskDefinitionMapper.queryByCodeList(Mockito.anySet()))
-                    .thenReturn(Arrays.asList(taskDefinition, taskDefinitionSecond));
-
-            when(workflowTaskRelationMapper.queryUpstreamByCode(PROJECT_CODE, TASK_CODE))
-                    .thenReturn(getProcessTaskRelationListV2());
-            when(workflowDefinitionMapper.queryByCode(PROCESS_DEFINITION_CODE))
-                    .thenReturn(getProcessDefinition());
-            when(workflowTaskRelationMapper.batchInsert(Mockito.anyList())).thenReturn(1);
-            when(workflowTaskRelationMapper.updateById(Mockito.any())).thenReturn(1);
-            when(workflowTaskRelationLogDao.batchInsert(Mockito.anyList())).thenReturn(2);
-            // success
-            Map<String, Object> successMap = taskDefinitionService.updateTaskWithUpstream(user, PROJECT_CODE, TASK_CODE,
-                    taskDefinitionJson, UPSTREAM_CODE);
-            assertEquals(Status.SUCCESS, successMap.get(Constants.STATUS));
-            user.setUserType(UserType.GENERAL_USER);
-        }
-    }
-
-    private String getTaskDefinitionJson() {
-        return "{\"name\":\"detail_up\",\"description\":\"\",\"taskType\":\"SHELL\",\"taskParams\":"
-                + "\"{\\\"resourceList\\\":[],\\\"localParams\\\":[{\\\"prop\\\":\\\"datetime\\\","
-                + "\\\"direct\\\":\\\"IN\\\",\\\"type\\\":\\\"VARCHAR\\\","
-                + "\\\"value\\\":\\\"${system.datetime}\\\"}],\\\"rawScript\\\":\\\"echo ${datetime}\\\","
-                + "\\\"conditionResult\\\":\\\"{\\\\\\\"successNode\\\\\\\":[\\\\\\\"\\\\\\\"],"
-                + "\\\\\\\"failedNode\\\\\\\":[\\\\\\\"\\\\\\\"]}\\\",\\\"dependence\\\":{}}\","
-                + "\"flag\":0,\"taskPriority\":0,\"workerGroup\":\"default\",\"failRetryTimes\":0,"
-                + "\"failRetryInterval\":0,\"timeoutFlag\":0,\"timeoutNotifyStrategy\":0,\"timeout\":0,"
-                + "\"delayTime\":0,\"resourceIds\":\"\"}";
     }
 
     /**
@@ -458,27 +496,6 @@ public class TaskDefinitionServiceImplTest {
 
         workflowTaskRelationList.add(workflowTaskRelation);
         return workflowTaskRelationList;
-    }
-
-    private List<WorkflowTaskRelation> getProcessTaskRelationListV2() {
-        List<WorkflowTaskRelation> workflowTaskRelationList = new ArrayList<>();
-
-        WorkflowTaskRelation workflowTaskRelation = new WorkflowTaskRelation();
-        fillProcessTaskRelation(workflowTaskRelation);
-
-        workflowTaskRelationList.add(workflowTaskRelation);
-        workflowTaskRelation = new WorkflowTaskRelation();
-        fillProcessTaskRelation(workflowTaskRelation);
-        workflowTaskRelation.setPreTaskCode(4L);
-        workflowTaskRelationList.add(workflowTaskRelation);
-        return workflowTaskRelationList;
-    }
-
-    private void fillProcessTaskRelation(WorkflowTaskRelation workflowTaskRelation) {
-        workflowTaskRelation.setProjectCode(PROJECT_CODE);
-        workflowTaskRelation.setWorkflowDefinitionCode(PROCESS_DEFINITION_CODE);
-        workflowTaskRelation.setPreTaskCode(TASK_CODE);
-        workflowTaskRelation.setPostTaskCode(TASK_CODE + 1L);
     }
 
     private List<WorkflowTaskRelationLog> getProcessTaskRelationLogList() {

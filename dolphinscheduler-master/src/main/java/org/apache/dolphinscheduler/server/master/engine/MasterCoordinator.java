@@ -24,6 +24,11 @@ import org.apache.dolphinscheduler.registry.api.enums.RegistryNodeType;
 import org.apache.dolphinscheduler.registry.api.ha.AbstractHAServer;
 import org.apache.dolphinscheduler.registry.api.ha.AbstractServerStatusChangeListener;
 import org.apache.dolphinscheduler.server.master.config.MasterConfig;
+import org.apache.dolphinscheduler.server.master.failover.IFailoverCoordinator;
+import org.apache.dolphinscheduler.server.master.utils.MasterThreadFactory;
+
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -38,15 +43,24 @@ public class MasterCoordinator extends AbstractHAServer {
 
     private final ITaskGroupCoordinator taskGroupCoordinator;
 
+    private final IFailoverCoordinator failoverCoordinator;
+
+    private final IWorkflowSerialCoordinator workflowSerialCoordinator;
+
     public MasterCoordinator(final Registry registry,
                              final MasterConfig masterConfig,
-                             final ITaskGroupCoordinator taskGroupCoordinator) {
+                             final ITaskGroupCoordinator taskGroupCoordinator,
+                             final IFailoverCoordinator failoverCoordinator,
+                             final IWorkflowSerialCoordinator workflowSerialCoordinator) {
         super(
                 registry,
                 RegistryNodeType.MASTER_COORDINATOR.getRegistryPath(),
                 masterConfig.getMasterAddress());
         this.taskGroupCoordinator = taskGroupCoordinator;
-        addServerStatusChangeListener(new MasterCoordinatorListener(taskGroupCoordinator));
+        this.failoverCoordinator = failoverCoordinator;
+        this.workflowSerialCoordinator = workflowSerialCoordinator;
+        addServerStatusChangeListener(
+                new MasterCoordinatorListener(taskGroupCoordinator, failoverCoordinator, workflowSerialCoordinator));
     }
 
     @Override
@@ -65,18 +79,40 @@ public class MasterCoordinator extends AbstractHAServer {
 
         private final ITaskGroupCoordinator taskGroupCoordinator;
 
-        public MasterCoordinatorListener(ITaskGroupCoordinator taskGroupCoordinator) {
+        private final IFailoverCoordinator failoverCoordinator;
+
+        private final IWorkflowSerialCoordinator workflowSerialCoordinator;
+        private Future<?> failoverCoordinatorFuture;
+
+        public MasterCoordinatorListener(ITaskGroupCoordinator taskGroupCoordinator,
+                                         IFailoverCoordinator failoverCoordinator,
+                                         IWorkflowSerialCoordinator workflowSerialCoordinator) {
             this.taskGroupCoordinator = checkNotNull(taskGroupCoordinator);
+            this.failoverCoordinator = checkNotNull(failoverCoordinator);
+            this.workflowSerialCoordinator = checkNotNull(workflowSerialCoordinator);
         }
 
         @Override
         public void changeToActive() {
             taskGroupCoordinator.start();
+            workflowSerialCoordinator.start();
+            failoverCoordinatorFuture =
+                    MasterThreadFactory.getDefaultSchedulerThreadExecutor().scheduleWithFixedDelay(() -> {
+                        try {
+                            failoverCoordinator.cleanHistoryFailoverFinishedMarks();
+                        } catch (Exception e) {
+                            log.error("FailoverCoordinator cleanHistoryFailoverFinishedMarks failed", e);
+                        }
+                    }, 0, 1, TimeUnit.DAYS);
         }
 
         @Override
         public void changeToStandBy() {
             taskGroupCoordinator.close();
+            workflowSerialCoordinator.close();
+            if (failoverCoordinatorFuture != null) {
+                failoverCoordinatorFuture.cancel(true);
+            }
         }
     }
 

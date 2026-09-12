@@ -75,13 +75,19 @@ pg_ctl reload
 
 Then, set the database configurations by exporting the following environment variables, change {user} and {password} to what you set in the previous step.
 
+> **⚠️ Timezone Configuration Notice**
+>
+> Avoid using ambiguous timezone identifiers like `CST`, which may cause scheduling time errors.
+>
+> Use explicit timezone like: `serverTimezone=Asia/Shanghai`
+
 For MySQL:
 
 ```shell
 # for mysql
 export DATABASE=${DATABASE:-mysql}
 export SPRING_PROFILES_ACTIVE=${DATABASE}
-export SPRING_DATASOURCE_URL="jdbc:mysql://127.0.0.1:3306/dolphinscheduler?useUnicode=true&characterEncoding=UTF-8&useSSL=false"
+export SPRING_DATASOURCE_URL="jdbc:mysql://127.0.0.1:3306/dolphinscheduler?useUnicode=true&characterEncoding=UTF-8&useSSL=false&serverTimezone={your_timezone}"
 export SPRING_DATASOURCE_USERNAME={user}
 export SPRING_DATASOURCE_PASSWORD={password}
 ```
@@ -125,7 +131,7 @@ restarting `api-server` and `worker-server`. Mount to container volume in the sa
 like Docker.
 
 > Note: If you only want to use MySQL in the datasource center, there is no requirement for the version of MySQL JDBC driver.
-> But if you want to use MySQL as the metabase of DolphinScheduler, it only supports [8.0.16 and above](https:/ /repo1.maven.org/maven2/mysql/mysql-connector-java/8.0.16/mysql-connector-java-8.0.16.jar) version.
+> But if you want to use MySQL as the metabase of DolphinScheduler, it only supports [8.0.16 and above](https://repo1.maven.org/maven2/mysql/mysql-connector-java/8.0.16/mysql-connector-java-8.0.16.jar) version.
 
 [mysql]: https://downloads.MySQL.com/archives/c-j/
 

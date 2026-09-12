@@ -12,9 +12,6 @@
 
 ## 任务参数
 
-[//]: # (TODO: use the commented anchor below once our website template supports this syntax)
-[//]: # (- 默认参数说明请参考[DolphinScheduler任务参数附录]&#40;appendix.md#默认任务参数&#41;`默认任务参数`一栏。)
-
 - 默认参数说明请参考[DolphinScheduler任务参数附录](appendix.md)`默认任务参数`一栏。
 
 | **任务参数** |                            **描述**                             |
@@ -25,6 +22,7 @@
 | 主类名      | 启动类的完整主类名(可选)                                                 |
 | 主程序包     | 选择要运行程序的主程序包                                                  |
 | 资源       | 可以是外部JAR包也可以是其他资源文件，它们都会被加入到类路径或模块路径中，您可以在自己的JAVA脚本中轻松获取      |
+| 自定义参数    | 是 Java 任务局部的用户自定义参数，会替换主程序参数和JVM参数中以 ${变量} 的内容。               |
 
 ## 任务样例
 

@@ -19,6 +19,7 @@ package org.apache.dolphinscheduler.server.master.engine;
 
 import org.apache.dolphinscheduler.common.enums.Flag;
 import org.apache.dolphinscheduler.common.enums.TaskGroupQueueStatus;
+import org.apache.dolphinscheduler.dao.entity.TaskDefinition;
 import org.apache.dolphinscheduler.dao.entity.TaskGroupQueue;
 import org.apache.dolphinscheduler.dao.entity.TaskInstance;
 
@@ -66,9 +67,10 @@ public interface ITaskGroupCoordinator extends AutoCloseable {
      * The TaskInstance shouldn't dispatch until there exist available slot, the taskGroupCoordinator notify it.
      *
      * @param taskInstance the task instance which want to acquire task group slot.
+     * @param taskDefinition the task definition which contains the task group.
      * @throws IllegalArgumentException if the taskInstance is null or the used taskGroup doesn't exist.
      */
-    void acquireTaskGroupSlot(TaskInstance taskInstance);
+    void acquireTaskGroupSlot(TaskInstance taskInstance, TaskDefinition taskDefinition);
 
     /**
      * If the TaskInstance is using TaskGroup then it need to release TaskGroupSlot.
@@ -88,6 +90,17 @@ public interface ITaskGroupCoordinator extends AutoCloseable {
      * @throws IllegalArgumentException If the taskInstance is null or the task doesn't use task group.
      */
     void releaseTaskGroupSlot(TaskInstance taskInstance);
+
+    /**
+     * Remove the task from the TaskGroup waiting queue.
+     * <p>
+     * The removal succeeds only while the queue is still in {@link TaskGroupQueueStatus#WAIT_QUEUE}. A successful
+     * removal guarantees that the coordinator has not acquired the queue for dispatch.
+     *
+     * @param taskInstance taskInstance
+     * @return true if the task was removed from the waiting queue
+     */
+    boolean releaseWaitingTaskGroupSlot(TaskInstance taskInstance);
 
     /**
      * Close the TaskGroupCoordinator, once closed, the coordinator will not work until you have started the coordinator again.

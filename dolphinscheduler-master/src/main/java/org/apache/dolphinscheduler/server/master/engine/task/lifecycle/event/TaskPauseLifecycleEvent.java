@@ -18,21 +18,28 @@
 package org.apache.dolphinscheduler.server.master.engine.task.lifecycle.event;
 
 import org.apache.dolphinscheduler.server.master.engine.ILifecycleEventType;
+import org.apache.dolphinscheduler.server.master.engine.task.execution.ITaskExecution;
 import org.apache.dolphinscheduler.server.master.engine.task.lifecycle.AbstractTaskLifecycleEvent;
 import org.apache.dolphinscheduler.server.master.engine.task.lifecycle.TaskLifecycleEventType;
-import org.apache.dolphinscheduler.server.master.engine.task.runnable.ITaskExecutionRunnable;
 
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 @Getter
-@AllArgsConstructor
 public class TaskPauseLifecycleEvent extends AbstractTaskLifecycleEvent {
 
-    private final ITaskExecutionRunnable taskExecutionRunnable;
+    private final ITaskExecution taskExecution;
 
-    public static TaskPauseLifecycleEvent of(ITaskExecutionRunnable taskExecutionRunnable) {
-        return new TaskPauseLifecycleEvent(taskExecutionRunnable);
+    private TaskPauseLifecycleEvent(final ITaskExecution taskExecution, long delayTime) {
+        super(delayTime);
+        this.taskExecution = taskExecution;
+    }
+
+    public static TaskPauseLifecycleEvent of(ITaskExecution taskExecution) {
+        return of(taskExecution, 0);
+    }
+
+    public static TaskPauseLifecycleEvent of(ITaskExecution taskExecution, long delayTime) {
+        return new TaskPauseLifecycleEvent(taskExecution, delayTime);
     }
 
     @Override
@@ -43,7 +50,8 @@ public class TaskPauseLifecycleEvent extends AbstractTaskLifecycleEvent {
     @Override
     public String toString() {
         return "TaskPauseLifecycleEvent{" +
-                "task=" + taskExecutionRunnable.getName() +
+                "task=" + taskExecution.getName() + ", " +
+                "delayTime=" + delayTime +
                 '}';
     }
 }

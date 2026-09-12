@@ -24,9 +24,6 @@ import org.apache.dolphinscheduler.dao.entity.User;
 
 import java.util.List;
 
-/**
- * alert plugin instance service
- */
 public interface AlertPluginInstanceService {
 
     /**
@@ -79,14 +76,14 @@ public interface AlertPluginInstanceService {
      *
      * @return alert plugins
      */
-    List<AlertPluginInstanceVO> queryAll();
+    List<AlertPluginInstanceVO> queryAll(User loginUser);
 
     /**
      * checkExistPluginInstanceName
      * @param pluginName plugin name
      * @return isExist
      */
-    boolean checkExistPluginInstanceName(String pluginName);
+    boolean checkExistPluginInstanceName(User loginUser, String pluginName);
 
     /**
      * queryPluginPage
@@ -98,5 +95,5 @@ public interface AlertPluginInstanceService {
      */
     PageInfo<AlertPluginInstanceVO> listPaging(User loginUser, String searchVal, int pageNo, int pageSize);
 
-    void testSend(int pluginDefineId, String pluginInstanceParams);
+    void testSend(User loginUser, int pluginDefineId, String pluginInstanceParams);
 }

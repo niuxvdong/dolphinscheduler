@@ -23,19 +23,18 @@ import org.apache.dolphinscheduler.common.utils.JSONUtils;
 import org.apache.dolphinscheduler.dao.entity.Command;
 import org.apache.dolphinscheduler.dao.entity.WorkflowDefinition;
 import org.apache.dolphinscheduler.dao.entity.WorkflowInstance;
-import org.apache.dolphinscheduler.dao.repository.TaskInstanceDao;
 import org.apache.dolphinscheduler.dao.repository.WorkflowInstanceDao;
 import org.apache.dolphinscheduler.extract.master.command.ICommandParam;
 import org.apache.dolphinscheduler.extract.master.command.RunWorkflowCommandParam;
 import org.apache.dolphinscheduler.plugin.task.api.model.Property;
+import org.apache.dolphinscheduler.plugin.task.api.utils.GlobalParameterUtils;
 import org.apache.dolphinscheduler.server.master.config.MasterConfig;
 import org.apache.dolphinscheduler.server.master.engine.graph.IWorkflowGraph;
 import org.apache.dolphinscheduler.server.master.engine.graph.WorkflowExecutionGraph;
 import org.apache.dolphinscheduler.server.master.engine.graph.WorkflowGraphTopologyLogicalVisitor;
-import org.apache.dolphinscheduler.server.master.engine.task.runnable.TaskExecutionRunnable;
-import org.apache.dolphinscheduler.server.master.engine.task.runnable.TaskExecutionRunnableBuilder;
+import org.apache.dolphinscheduler.server.master.engine.task.execution.TaskExecution;
+import org.apache.dolphinscheduler.server.master.engine.task.execution.TaskExecutionBuilder;
 import org.apache.dolphinscheduler.server.master.runner.WorkflowExecuteContext.WorkflowExecuteContextBuilder;
-import org.apache.dolphinscheduler.service.expand.CuringParamsService;
 
 import org.apache.commons.collections4.CollectionUtils;
 
@@ -61,16 +60,10 @@ public class RunWorkflowCommandHandler extends AbstractCommandHandler {
     private WorkflowInstanceDao workflowInstanceDao;
 
     @Autowired
-    private TaskInstanceDao taskInstanceDao;
-
-    @Autowired
     private MasterConfig masterConfig;
 
     @Autowired
     private ApplicationContext applicationContext;
-
-    @Autowired
-    private CuringParamsService curingParamsService;
 
     /**
      * Will generate a new workflow instance based on the command.
@@ -92,9 +85,9 @@ public class RunWorkflowCommandHandler extends AbstractCommandHandler {
     protected void assembleWorkflowExecutionGraph(final WorkflowExecuteContextBuilder workflowExecuteContextBuilder) {
         final IWorkflowGraph workflowGraph = workflowExecuteContextBuilder.getWorkflowGraph();
         final WorkflowExecutionGraph workflowExecutionGraph = new WorkflowExecutionGraph();
-        final BiConsumer<String, Set<String>> taskExecutionRunnableCreator = (task, successors) -> {
-            final TaskExecutionRunnableBuilder taskExecutionRunnableBuilder =
-                    TaskExecutionRunnableBuilder
+        final BiConsumer<String, Set<String>> taskExecutionCreator = (task, successors) -> {
+            final TaskExecutionBuilder taskExecutionBuilder =
+                    TaskExecutionBuilder
                             .builder()
                             .workflowExecutionGraph(workflowExecutionGraph)
                             .workflowDefinition(workflowExecuteContextBuilder.getWorkflowDefinition())
@@ -104,7 +97,7 @@ public class RunWorkflowCommandHandler extends AbstractCommandHandler {
                             .workflowEventBus(workflowExecuteContextBuilder.getWorkflowEventBus())
                             .applicationContext(applicationContext)
                             .build();
-            workflowExecutionGraph.addNode(new TaskExecutionRunnable(taskExecutionRunnableBuilder));
+            workflowExecutionGraph.addNode(new TaskExecution(taskExecutionBuilder));
             workflowExecutionGraph.addEdge(task, successors);
         };
 
@@ -113,9 +106,10 @@ public class RunWorkflowCommandHandler extends AbstractCommandHandler {
                         .taskDependType(workflowExecuteContextBuilder.getWorkflowInstance().getTaskDependType())
                         .onWorkflowGraph(workflowGraph)
                         .fromTask(parseStartNodesFromWorkflowInstance(workflowExecuteContextBuilder))
-                        .doVisitFunction(taskExecutionRunnableCreator)
+                        .doVisitFunction(taskExecutionCreator)
                         .build();
         workflowGraphTopologyLogicalVisitor.visit();
+        workflowExecutionGraph.removeUnReachableEdge();
 
         workflowExecuteContextBuilder.setWorkflowExecutionGraph(workflowExecutionGraph);
     }
@@ -130,7 +124,8 @@ public class RunWorkflowCommandHandler extends AbstractCommandHandler {
                 Optional.ofNullable(JSONUtils.parseObject(command.getCommandParam(), ICommandParam.class))
                         .map(ICommandParam::getCommandParams)
                         .orElse(null);
-        final List<Property> globalParamsList = JSONUtils.toList(workflowDefinition.getGlobalParams(), Property.class);
+        final List<Property> globalParamsList =
+                GlobalParameterUtils.deserializeGlobalParameter(workflowDefinition.getGlobalParams());
         Map<String, Property> finalParams = new HashMap<>();
         if (CollectionUtils.isNotEmpty(globalParamsList)) {
             globalParamsList.forEach(globalParam -> finalParams.put(globalParam.getProp(), globalParam));

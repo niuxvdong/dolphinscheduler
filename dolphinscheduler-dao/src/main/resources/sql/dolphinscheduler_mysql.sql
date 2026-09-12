@@ -342,7 +342,6 @@ CREATE TABLE `t_ds_command` (
   `tenant_code`               varchar(64) DEFAULT 'default' COMMENT 'tenant code',
   `environment_code`          bigint(20) DEFAULT '-1' COMMENT 'environment code',
   `dry_run`                   tinyint(4) DEFAULT '0' COMMENT 'dry run flag：0 normal, 1 dry run',
-  `test_flag`                 tinyint(4) DEFAULT null COMMENT 'test flag：0 normal, 1 test run',
   PRIMARY KEY (`id`),
   KEY `priority_id_index` (`workflow_instance_priority`,`id`) USING BTREE
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8 COLLATE = utf8_bin;
@@ -351,6 +350,27 @@ CREATE TABLE `t_ds_command` (
 -- Records of t_ds_command
 -- ----------------------------
 
+-- ----------------------------
+-- Table structure for t_ds_serial_command
+-- ----------------------------
+DROP TABLE IF EXISTS `t_ds_serial_command`;
+CREATE TABLE `t_ds_serial_command` (
+  `id` int(11) NOT NULL AUTO_INCREMENT COMMENT 'primary key',
+  `workflow_definition_code` bigint(20) NOT NULL COMMENT 'workflow definition code',
+  `workflow_definition_version` int(11) NOT NULL COMMENT 'workflow definition version',
+  `workflow_instance_id` bigint(20) NOT NULL COMMENT 'workflow instance id',
+  `state` tinyint(4) NOT NULL DEFAULT 0 COMMENT 'state of the serial queue: 0 waiting, 1 fired',
+  `command` text COMMENT 'command json',
+  `create_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'create time',
+  `update_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'update time',
+  PRIMARY KEY (`id`),
+  KEY `idx_workflow_instance_id` (`workflow_instance_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8 COLLATE = utf8_bin;
+
+-- ----------------------------
+-- Table structure for t_ds_serial_command
+-- ----------------------------
+    
 -- ----------------------------
 -- Table structure for t_ds_datasource
 -- ----------------------------
@@ -397,7 +417,6 @@ CREATE TABLE `t_ds_error_command` (
   `environment_code` bigint(20) DEFAULT '-1' COMMENT 'environment code',
   `message` text COMMENT 'message',
   `dry_run` tinyint(4) DEFAULT '0' COMMENT 'dry run flag: 0 normal, 1 dry run',
-  `test_flag` tinyint(4) DEFAULT null COMMENT 'test flag：0 normal, 1 test run',
   PRIMARY KEY (`id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE = utf8_bin;
 
@@ -426,8 +445,9 @@ CREATE TABLE `t_ds_workflow_definition` (
   `execution_type` tinyint(4) DEFAULT '0' COMMENT 'execution_type 0:parallel,1:serial wait,2:serial discard,3:serial priority',
   `create_time` datetime NOT NULL COMMENT 'create time',
   `update_time` datetime NOT NULL COMMENT 'update time',
-  PRIMARY KEY (`id`,`code`),
+  PRIMARY KEY (`id`),
   UNIQUE KEY `workflow_unique` (`name`,`project_code`) USING BTREE,
+  UNIQUE KEY uniq_workflow_definition_code (code),
   KEY `idx_project_code` (`project_code`) USING BTREE
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8 COLLATE = utf8_bin;
 
@@ -624,10 +644,10 @@ CREATE TABLE `t_ds_workflow_instance` (
   `dry_run` tinyint(4) DEFAULT '0' COMMENT 'dry run flag：0 normal, 1 dry run',
   `next_workflow_instance_id` int(11) DEFAULT '0' COMMENT 'serial queue next workflowInstanceId',
   `restart_time` datetime DEFAULT NULL COMMENT 'workflow instance restart time',
-  `test_flag`  tinyint(4) DEFAULT null COMMENT 'test flag：0 normal, 1 test run',
   PRIMARY KEY (`id`),
   KEY `workflow_instance_index` (`workflow_definition_code`,`id`) USING BTREE,
-  KEY `start_time_index` (`start_time`,`end_time`) USING BTREE
+  KEY `start_time_index` (`start_time`,`end_time`) USING BTREE,
+  KEY `idx_project_start_time` (`project_code` ASC, `start_time` DESC) USING BTREE
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8 COLLATE = utf8_bin;
 
 -- ----------------------------
@@ -839,6 +859,7 @@ CREATE TABLE `t_ds_schedules` (
   `end_time` datetime NOT NULL COMMENT 'end time',
   `timezone_id` varchar(40) DEFAULT NULL COMMENT 'schedule timezone id',
   `crontab` varchar(255) NOT NULL COMMENT 'crontab description',
+  `missed_fire_policy` tinyint NOT NULL DEFAULT '2' COMMENT 'missed fire policy: 0 skip missed, 1 fire once now, 2 fire all missed',
   `failure_strategy` tinyint(4) NOT NULL COMMENT 'failure strategy. 0:end,1:continue',
   `user_id` int(11) NOT NULL COMMENT 'user id',
   `release_state` tinyint(4) NOT NULL COMMENT 'release state. 0:offline,1:online ',
@@ -850,7 +871,8 @@ CREATE TABLE `t_ds_schedules` (
   `environment_code` bigint(20) DEFAULT '-1' COMMENT 'environment code',
   `create_time` datetime NOT NULL COMMENT 'create time',
   `update_time` datetime NOT NULL COMMENT 'update time',
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_workflow_definition_code` (`workflow_definition_code`)
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8 COLLATE = utf8_bin;
 
 -- ----------------------------
@@ -915,10 +937,10 @@ CREATE TABLE `t_ds_task_instance` (
   `dry_run` tinyint(4) DEFAULT '0' COMMENT 'dry run flag: 0 normal, 1 dry run',
   `cpu_quota` int(11) DEFAULT '-1' NOT NULL COMMENT 'cpuQuota(%): -1:Infinity',
   `memory_max` int(11) DEFAULT '-1' NOT NULL COMMENT 'MemoryMax(MB): -1:Infinity',
-  `test_flag`  tinyint(4) DEFAULT null COMMENT 'test flag：0 normal, 1 test run',
   PRIMARY KEY (`id`),
   KEY `workflow_instance_id` (`workflow_instance_id`) USING BTREE,
-  KEY `idx_code_version` (`task_code`, `task_definition_version`) USING BTREE
+  KEY `idx_code_version` (`task_code`, `task_definition_version`) USING BTREE,
+  KEY `idx_project_submit_time` (`project_code` ASC, `submit_time` DESC) USING BTREE
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8 COLLATE = utf8_bin;
 
 -- ----------------------------
@@ -1154,8 +1176,12 @@ CREATE TABLE `t_ds_task_group_queue` (
   `in_queue` tinyint(4) DEFAULT '0' COMMENT 'ready to get the queue by other task finish 0 NO ,1 YES',
   `create_time` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `update_time` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY( `id` ),
   KEY `idx_t_ds_task_group_queue_in_queue` (`in_queue`),
-  PRIMARY KEY( `id` )
+  KEY `idx_task_id` (`task_id`),
+  KEY `idx_group_id` (`group_id`),
+  KEY `idx_status` (`status`),
+  KEY `idx_workflow_instance_id` (`workflow_instance_id`)
 )ENGINE= INNODB AUTO_INCREMENT= 1 DEFAULT CHARSET= utf8 COLLATE = utf8_bin;
 
 -- ----------------------------

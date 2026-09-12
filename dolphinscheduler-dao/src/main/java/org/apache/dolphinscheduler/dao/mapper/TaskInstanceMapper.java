@@ -34,14 +34,10 @@ import java.util.Set;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 
-/**
- * task instance mapper interface
- */
 public interface TaskInstanceMapper extends BaseMapper<TaskInstance> {
 
     List<TaskInstance> findValidTaskListByWorkflowInstanceId(@Param("workflowInstanceId") Integer workflowInstanceId,
-                                                             @Param("flag") Flag flag,
-                                                             @Param("testFlag") int testFlag);
+                                                             @Param("flag") Flag flag);
 
     TaskInstance queryByInstanceIdAndCode(@Param("workflowInstanceId") int workflowInstanceId,
                                           @Param("taskCode") Long taskCode);
@@ -133,16 +129,13 @@ public interface TaskInstanceMapper extends BaseMapper<TaskInstance> {
      * find last task instance list in the date interval
      *
      * @param taskCodes taskCodes
-     * @param testFlag testFlag
      * @return task instance list
      */
     List<TaskInstance> findLastTaskInstances(@Param("workflowInstanceId") Integer workflowInstanceId,
-                                             @Param("taskCodes") Set<Long> taskCodes,
-                                             @Param("testFlag") int testFlag);
+                                             @Param("taskCodes") Set<Long> taskCodes);
 
     TaskInstance findLastTaskInstance(@Param("workflowInstanceId") Integer workflowInstanceId,
-                                      @Param("taskCode") long depTaskCode,
-                                      @Param("testFlag") int testFlag);
+                                      @Param("taskCode") long depTaskCode);
 
     void updateTaskInstanceState(@Param("taskInstanceId") Integer taskInstanceId,
                                  @Param("originState") int originState,

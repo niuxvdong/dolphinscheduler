@@ -27,27 +27,9 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
-import javax.annotation.Nullable;
-
 import lombok.NonNull;
 
 public interface CuringParamsService {
-
-    /**
-     * time function need expand
-     * @param placeholderName
-     * @return
-     */
-    boolean timeFunctionNeedExpand(String placeholderName);
-
-    /**
-     * time function extension
-     * @param workflowInstanceId
-     * @param timezone
-     * @param placeholderName
-     * @return
-     */
-    String timeFunctionExtension(Integer workflowInstanceId, String timezone, String placeholderName);
 
     /**
      * convert parameter placeholders
@@ -85,16 +67,6 @@ public interface CuringParamsService {
                                                   @NonNull WorkflowInstance workflowInstance,
                                                   String projectName,
                                                   String workflowDefinitionName);
-
-    /**
-     * Parse workflow star parameter
-     */
-    Map<String, Property> parseWorkflowStartParam(@Nullable Map<String, String> cmdParam);
-
-    /**
-     * Parse workflow father parameter
-     */
-    Map<String, Property> parseWorkflowFatherParam(@Nullable Map<String, String> cmdParam);
 
     /**
      * preBuildBusinessParams

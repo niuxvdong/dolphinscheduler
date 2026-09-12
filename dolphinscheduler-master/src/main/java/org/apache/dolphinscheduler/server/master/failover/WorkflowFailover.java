@@ -21,10 +21,11 @@ import org.apache.dolphinscheduler.common.enums.CommandType;
 import org.apache.dolphinscheduler.common.enums.WorkflowExecutionStatus;
 import org.apache.dolphinscheduler.common.utils.JSONUtils;
 import org.apache.dolphinscheduler.dao.entity.Command;
-import org.apache.dolphinscheduler.dao.entity.WorkflowInstance;
+import org.apache.dolphinscheduler.dao.model.WorkflowInstanceSummaryDto;
 import org.apache.dolphinscheduler.dao.repository.CommandDao;
 import org.apache.dolphinscheduler.dao.repository.WorkflowInstanceDao;
 import org.apache.dolphinscheduler.extract.master.command.WorkflowFailoverCommandParam;
+import org.apache.dolphinscheduler.server.master.metrics.WorkflowInstanceMetrics;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -43,11 +44,12 @@ public class WorkflowFailover {
     private CommandDao commandDao;
 
     @Transactional
-    public void failoverWorkflow(final WorkflowInstance workflowInstance) {
+    public void failoverWorkflow(final WorkflowInstanceSummaryDto workflowInstance) {
         workflowInstanceDao.updateWorkflowInstanceState(
                 workflowInstance.getId(),
                 workflowInstance.getState(),
                 WorkflowExecutionStatus.FAILOVER);
+        WorkflowInstanceMetrics.recordWorkflowInstanceFailover(workflowInstance.getWorkflowDefinitionCode());
 
         final WorkflowFailoverCommandParam failoverWorkflowCommandParam = WorkflowFailoverCommandParam.builder()
                 .workflowExecutionStatus(workflowInstance.getState())

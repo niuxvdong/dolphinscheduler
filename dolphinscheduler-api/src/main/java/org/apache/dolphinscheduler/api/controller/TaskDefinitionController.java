@@ -23,18 +23,18 @@ import static org.apache.dolphinscheduler.api.enums.Status.QUERY_DETAIL_OF_TASK_
 import static org.apache.dolphinscheduler.api.enums.Status.QUERY_TASK_DEFINITION_VERSIONS_ERROR;
 import static org.apache.dolphinscheduler.api.enums.Status.RELEASE_TASK_DEFINITION_ERROR;
 import static org.apache.dolphinscheduler.api.enums.Status.SWITCH_TASK_DEFINITION_VERSION_ERROR;
-import static org.apache.dolphinscheduler.api.enums.Status.UPDATE_TASK_DEFINITION_ERROR;
 
 import org.apache.dolphinscheduler.api.audit.OperatorLog;
 import org.apache.dolphinscheduler.api.audit.enums.AuditType;
 import org.apache.dolphinscheduler.api.exceptions.ApiException;
 import org.apache.dolphinscheduler.api.service.TaskDefinitionService;
 import org.apache.dolphinscheduler.api.utils.Result;
+import org.apache.dolphinscheduler.api.vo.TaskDefinitionVO;
 import org.apache.dolphinscheduler.common.constants.Constants;
 import org.apache.dolphinscheduler.common.enums.ReleaseState;
 import org.apache.dolphinscheduler.dao.entity.User;
 
-import java.util.Map;
+import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -42,7 +42,6 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -55,9 +54,6 @@ import io.swagger.v3.oas.annotations.Parameters;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
-/**
- * task definition controller
- */
 @Tag(name = "TASK_DEFINITION_TAG")
 @RestController
 @RequestMapping("projects/{projectCode}/task-definition")
@@ -65,37 +61,6 @@ public class TaskDefinitionController extends BaseController {
 
     @Autowired
     private TaskDefinitionService taskDefinitionService;
-
-    /**
-     * update task definition
-     *
-     * @param loginUser             login user
-     * @param projectCode           project code
-     * @param code                  task definition code
-     * @param taskDefinitionJsonObj task definition json object
-     * @param upstreamCodes         upstream task codes, sep comma
-     * @return update result code
-     */
-    @Operation(summary = "updateWithUpstream", description = "UPDATE_TASK_DEFINITION_NOTES")
-    @Parameters({
-            @Parameter(name = "projectCode", description = "PROJECT_CODE", required = true, schema = @Schema(implementation = long.class)),
-            @Parameter(name = "code", description = "TASK_DEFINITION_CODE", required = true, schema = @Schema(implementation = long.class, example = "1")),
-            @Parameter(name = "taskDefinitionJsonObj", description = "TASK_DEFINITION_JSON", required = true, schema = @Schema(implementation = String.class)),
-            @Parameter(name = "upstreamCodes", description = "UPSTREAM_CODES", required = false, schema = @Schema(implementation = String.class))
-    })
-    @PutMapping(value = "/{code}/with-upstream")
-    @ResponseStatus(HttpStatus.OK)
-    @ApiException(UPDATE_TASK_DEFINITION_ERROR)
-    @OperatorLog(auditType = AuditType.TASK_UPDATE)
-    public Result updateTaskWithUpstream(@Parameter(hidden = true) @RequestAttribute(value = Constants.SESSION_USER) User loginUser,
-                                         @Parameter(name = "projectCode", description = "PROJECT_CODE", required = true) @PathVariable long projectCode,
-                                         @PathVariable(value = "code") long code,
-                                         @RequestParam(value = "taskDefinitionJsonObj", required = true) String taskDefinitionJsonObj,
-                                         @RequestParam(value = "upstreamCodes", required = false) String upstreamCodes) {
-        Map<String, Object> result = taskDefinitionService.updateTaskWithUpstream(loginUser, projectCode, code,
-                taskDefinitionJsonObj, upstreamCodes);
-        return returnDataList(result);
-    }
 
     /**
      * query task definition version paging list info
@@ -144,12 +109,12 @@ public class TaskDefinitionController extends BaseController {
     @ResponseStatus(HttpStatus.OK)
     @ApiException(SWITCH_TASK_DEFINITION_VERSION_ERROR)
     @OperatorLog(auditType = AuditType.TASK_SWITCH_VERSION)
-    public Result switchTaskDefinitionVersion(@Parameter(hidden = true) @RequestAttribute(value = Constants.SESSION_USER) User loginUser,
-                                              @Parameter(name = "projectCode", description = "PROJECT_CODE", required = true) @PathVariable long projectCode,
-                                              @PathVariable(value = "code") long code,
-                                              @PathVariable(value = "version") int version) {
-        Map<String, Object> result = taskDefinitionService.switchVersion(loginUser, projectCode, code, version);
-        return returnDataList(result);
+    public Result<Void> switchTaskDefinitionVersion(@Parameter(hidden = true) @RequestAttribute(value = Constants.SESSION_USER) User loginUser,
+                                                    @Parameter(name = "projectCode", description = "PROJECT_CODE", required = true) @PathVariable long projectCode,
+                                                    @PathVariable(value = "code") long code,
+                                                    @PathVariable(value = "version") int version) {
+        taskDefinitionService.switchVersion(loginUser, projectCode, code, version);
+        return Result.success();
     }
 
     /**
@@ -170,13 +135,12 @@ public class TaskDefinitionController extends BaseController {
     @ResponseStatus(HttpStatus.OK)
     @ApiException(DELETE_TASK_DEFINITION_VERSION_ERROR)
     @OperatorLog(auditType = AuditType.TASK_DELETE_VERSION)
-    public Result deleteTaskDefinitionVersion(@Parameter(hidden = true) @RequestAttribute(value = Constants.SESSION_USER) User loginUser,
-                                              @Parameter(name = "projectCode", description = "PROJECT_CODE", required = true) @PathVariable long projectCode,
-                                              @PathVariable(value = "code") long code,
-                                              @PathVariable(value = "version") int version) {
-        Map<String, Object> result =
-                taskDefinitionService.deleteByCodeAndVersion(loginUser, projectCode, code, version);
-        return returnDataList(result);
+    public Result<Void> deleteTaskDefinitionVersion(@Parameter(hidden = true) @RequestAttribute(value = Constants.SESSION_USER) User loginUser,
+                                                    @Parameter(name = "projectCode", description = "PROJECT_CODE", required = true) @PathVariable long projectCode,
+                                                    @PathVariable(value = "code") long code,
+                                                    @PathVariable(value = "version") int version) {
+        taskDefinitionService.deleteByCodeAndVersion(loginUser, projectCode, code, version);
+        return Result.success();
     }
 
     /**
@@ -194,11 +158,12 @@ public class TaskDefinitionController extends BaseController {
     @GetMapping(value = "/{code}")
     @ResponseStatus(HttpStatus.OK)
     @ApiException(QUERY_DETAIL_OF_TASK_DEFINITION_ERROR)
-    public Result queryTaskDefinitionDetail(@Parameter(hidden = true) @RequestAttribute(value = Constants.SESSION_USER) User loginUser,
-                                            @Parameter(name = "projectCode", description = "PROJECT_CODE", required = true) @PathVariable long projectCode,
-                                            @PathVariable(value = "code") long code) {
-        Map<String, Object> result = taskDefinitionService.queryTaskDefinitionDetail(loginUser, projectCode, code);
-        return returnDataList(result);
+    public Result<TaskDefinitionVO> queryTaskDefinitionDetail(@Parameter(hidden = true) @RequestAttribute(value = Constants.SESSION_USER) User loginUser,
+                                                              @Parameter(name = "projectCode", description = "PROJECT_CODE", required = true) @PathVariable long projectCode,
+                                                              @PathVariable(value = "code") long code) {
+        TaskDefinitionVO taskDefinitionVO =
+                taskDefinitionService.queryTaskDefinitionDetail(loginUser, projectCode, code);
+        return Result.success(taskDefinitionVO);
     }
 
     /**
@@ -215,10 +180,10 @@ public class TaskDefinitionController extends BaseController {
     @GetMapping(value = "/gen-task-codes")
     @ResponseStatus(HttpStatus.OK)
     @ApiException(LOGIN_USER_QUERY_PROJECT_LIST_PAGING_ERROR)
-    public Result genTaskCodeList(@Parameter(hidden = true) @RequestAttribute(value = Constants.SESSION_USER) User loginUser,
-                                  @RequestParam("genNum") Integer genNum) {
-        Map<String, Object> result = taskDefinitionService.genTaskCodeList(genNum);
-        return returnDataList(result);
+    public Result<List<Long>> genTaskCodeList(@Parameter(hidden = true) @RequestAttribute(value = Constants.SESSION_USER) User loginUser,
+                                              @RequestParam("genNum") Integer genNum) {
+        List<Long> taskCodes = taskDefinitionService.genTaskCodeList(genNum);
+        return Result.success(taskCodes);
     }
 
     /**
@@ -240,12 +205,11 @@ public class TaskDefinitionController extends BaseController {
     @ResponseStatus(HttpStatus.OK)
     @ApiException(RELEASE_TASK_DEFINITION_ERROR)
     @OperatorLog(auditType = AuditType.TASK_RELEASE)
-    public Result releaseTaskDefinition(@Parameter(hidden = true) @RequestAttribute(value = Constants.SESSION_USER) User loginUser,
-                                        @Parameter(name = "projectCode", description = "PROJECT_CODE", required = true) @PathVariable long projectCode,
-                                        @PathVariable(value = "code", required = true) long code,
-                                        @RequestParam(value = "releaseState", required = true, defaultValue = "OFFLINE") ReleaseState releaseState) {
-        Map<String, Object> result =
-                taskDefinitionService.releaseTaskDefinition(loginUser, projectCode, code, releaseState);
-        return returnDataList(result);
+    public Result<Void> releaseTaskDefinition(@Parameter(hidden = true) @RequestAttribute(value = Constants.SESSION_USER) User loginUser,
+                                              @Parameter(name = "projectCode", description = "PROJECT_CODE", required = true) @PathVariable long projectCode,
+                                              @PathVariable(value = "code", required = true) long code,
+                                              @RequestParam(value = "releaseState", required = true, defaultValue = "OFFLINE") ReleaseState releaseState) {
+        taskDefinitionService.releaseTaskDefinition(loginUser, projectCode, code, releaseState);
+        return Result.success();
     }
 }

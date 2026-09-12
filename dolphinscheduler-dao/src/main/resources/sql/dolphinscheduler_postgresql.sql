@@ -269,11 +269,38 @@ CREATE TABLE t_ds_command (
   dry_run                   int DEFAULT '0' ,
   workflow_instance_id       int DEFAULT 0,
   workflow_definition_version int DEFAULT 0,
-  test_flag                 int DEFAULT NULL ,
   PRIMARY KEY (id)
 ) ;
 
 create index priority_id_index on t_ds_command (workflow_instance_priority,id);
+
+-- ----------------------------
+-- Table structure for t_ds_serial_command
+-- ----------------------------
+DROP TABLE IF EXISTS t_ds_serial_command;
+CREATE TABLE t_ds_serial_command (
+     id SERIAL PRIMARY KEY,
+     workflow_definition_code BIGINT NOT NULL,
+     workflow_definition_version INT NOT NULL,
+     workflow_instance_id BIGINT NOT NULL,
+     state SMALLINT NOT NULL DEFAULT 0,
+     command TEXT,
+     create_time TIMESTAMP NOT NULL DEFAULT now(),
+     update_time TIMESTAMP NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_workflow_instance_id ON t_ds_serial_command (workflow_instance_id);
+COMMENT ON TABLE t_ds_serial_command IS 'serial command queue table';
+COMMENT ON COLUMN t_ds_serial_command.id IS 'primary key';
+COMMENT ON COLUMN t_ds_serial_command.workflow_definition_code IS 'workflow definition code';
+COMMENT ON COLUMN t_ds_serial_command.workflow_definition_version IS 'workflow definition version';
+COMMENT ON COLUMN t_ds_serial_command.workflow_instance_id IS 'workflow instance id';
+COMMENT ON COLUMN t_ds_serial_command.state IS 'state of the serial queue: 0 waiting, 1 fired';
+COMMENT ON COLUMN t_ds_serial_command.command IS 'command json';
+COMMENT ON COLUMN t_ds_serial_command.create_time IS 'create time';
+COMMENT ON COLUMN t_ds_serial_command.update_time IS 'update time';
+-- ----------------------------
+-- Table structure for t_ds_serial_command
+-- ----------------------------
 
 --
 -- Table structure for table t_ds_datasource
@@ -319,7 +346,6 @@ CREATE TABLE t_ds_error_command (
   message                   text ,
   workflow_instance_id       int DEFAULT 0,
   workflow_definition_version int DEFAULT 0,
-  test_flag                 int DEFAULT NULL ,
   PRIMARY KEY (id)
 );
 
@@ -349,7 +375,7 @@ CREATE TABLE t_ds_workflow_definition (
   CONSTRAINT workflow_definition_unique UNIQUE (name, project_code)
 ) ;
 
-create index workflow_definition_index on t_ds_workflow_definition (code,id);
+create unique index uniq_workflow_definition_code on t_ds_workflow_definition (code);
 create index workflow_definition_index_project_code on t_ds_workflow_definition (project_code);
 
 --
@@ -558,12 +584,12 @@ CREATE TABLE t_ds_workflow_instance (
   dry_run int DEFAULT '0' ,
   next_workflow_instance_id int DEFAULT '0',
   restart_time timestamp DEFAULT NULL ,
-  test_flag int DEFAULT NULL ,
   PRIMARY KEY (id)
 ) ;
 
 create index workflow_instance_index on t_ds_workflow_instance (workflow_definition_code,id);
 create index start_time_index on t_ds_workflow_instance (start_time,end_time);
+create index idx_project_start_time on t_ds_workflow_instance (project_code ASC, start_time DESC);
 
 --
 -- Table structure for table t_ds_project
@@ -759,6 +785,7 @@ CREATE TABLE t_ds_schedules (
   end_time timestamp NOT NULL ,
   timezone_id varchar(40) default NULL ,
   crontab varchar(255) NOT NULL ,
+  missed_fire_policy smallint NOT NULL DEFAULT 2,
   failure_strategy int NOT NULL ,
   user_id int NOT NULL ,
   release_state int NOT NULL ,
@@ -772,6 +799,7 @@ CREATE TABLE t_ds_schedules (
   update_time timestamp NOT NULL ,
   PRIMARY KEY (id)
 );
+CREATE UNIQUE INDEX uniq_schedules_workflow_definition_code ON t_ds_schedules (workflow_definition_code);
 
 --
 -- Table structure for table t_ds_session
@@ -829,18 +857,18 @@ CREATE TABLE t_ds_task_instance (
   dry_run int DEFAULT '0' ,
   cpu_quota int DEFAULT '-1' NOT NULL,
   memory_max int DEFAULT '-1' NOT NULL,
-  test_flag int DEFAULT NULL ,
   PRIMARY KEY (id)
 ) ;
 
 create index idx_task_instance_code_version on t_ds_task_instance (task_code, task_definition_version);
+create index idx_project_submit_time on t_ds_task_instance (project_code ASC, submit_time DESC);
 
 --
 -- Table structure for t_ds_task_instance_context
 --
 DROP TABLE IF EXISTS t_ds_task_instance_context;
 CREATE TABLE t_ds_task_instance_context (
-  id int NOT NULL,
+  id SERIAL NOT NULL,
   task_instance_id int NOT NULL,
   context text NOT NULL,
   context_type varchar(200) NOT NULL,
@@ -1164,6 +1192,10 @@ CREATE TABLE t_ds_task_group_queue (
 );
 
 create index idx_t_ds_task_group_queue_in_queue on t_ds_task_group_queue(in_queue);
+create index idx_t_ds_task_group_queue_task_id on t_ds_task_group_queue(task_id);
+create index idx_t_ds_task_group_queue_group_id on t_ds_task_group_queue(group_id);
+create index idx_t_ds_task_group_queue_status on t_ds_task_group_queue(status);
+create index idx_t_ds_task_group_queue_workflow_instance_id on t_ds_task_group_queue(workflow_instance_id);
 
 --
 -- Table structure for table t_ds_task_group
@@ -1315,7 +1347,7 @@ CREATE INDEX idx_sub_workflow_instance_id ON t_ds_relation_sub_workflow (sub_wor
 -- ----------------------------
 DROP TABLE IF EXISTS t_ds_workflow_task_lineage;
 CREATE TABLE t_ds_workflow_task_lineage (
-    id int NOT NULL,
+    id SERIAL NOT NULL,
     workflow_definition_code bigint NOT NULL DEFAULT 0,
     workflow_definition_version int NOT NULL DEFAULT 0,
     task_definition_code bigint NOT NULL DEFAULT 0,

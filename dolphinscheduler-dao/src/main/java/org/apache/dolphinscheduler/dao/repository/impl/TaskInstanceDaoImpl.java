@@ -19,17 +19,20 @@ package org.apache.dolphinscheduler.dao.repository.impl;
 
 import org.apache.dolphinscheduler.common.enums.FailureStrategy;
 import org.apache.dolphinscheduler.common.enums.Flag;
+import org.apache.dolphinscheduler.common.enums.TaskExecuteType;
 import org.apache.dolphinscheduler.common.enums.WorkflowExecutionStatus;
 import org.apache.dolphinscheduler.dao.entity.TaskInstance;
 import org.apache.dolphinscheduler.dao.entity.WorkflowInstance;
 import org.apache.dolphinscheduler.dao.mapper.TaskInstanceMapper;
 import org.apache.dolphinscheduler.dao.mapper.WorkflowInstanceMapper;
+import org.apache.dolphinscheduler.dao.model.TaskInstanceStatusCountDto;
 import org.apache.dolphinscheduler.dao.repository.BaseDao;
 import org.apache.dolphinscheduler.dao.repository.TaskInstanceDao;
 import org.apache.dolphinscheduler.plugin.task.api.enums.TaskExecutionStatus;
 
 import org.apache.commons.collections4.CollectionUtils;
 
+import java.util.Collection;
 import java.util.Date;
 import java.util.List;
 import java.util.Set;
@@ -39,6 +42,8 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
+
+import com.baomidou.mybatisplus.core.metadata.IPage;
 
 /**
  * Task Instance DAO implementation
@@ -66,7 +71,7 @@ public class TaskInstanceDaoImpl extends BaseDao<TaskInstance, TaskInstanceMappe
     @Override
     public boolean submitTaskInstanceToDB(TaskInstance taskInstance, WorkflowInstance workflowInstance) {
         WorkflowExecutionStatus processInstanceState = workflowInstance.getState();
-        if (processInstanceState.isFinished() || processInstanceState == WorkflowExecutionStatus.READY_STOP) {
+        if (processInstanceState.isFinalState() || processInstanceState == WorkflowExecutionStatus.READY_STOP) {
             log.warn("processInstance: {} state was: {}, skip submit this task, taskCode: {}",
                     workflowInstance.getId(),
                     processInstanceState,
@@ -125,8 +130,7 @@ public class TaskInstanceDaoImpl extends BaseDao<TaskInstance, TaskInstanceMappe
             return true;
         }
         List<TaskInstance> taskInstances =
-                this.queryValidTaskListByWorkflowInstanceId(taskInstance.getWorkflowInstanceId(),
-                        taskInstance.getTestFlag());
+                this.queryValidTaskListByWorkflowInstanceId(taskInstance.getWorkflowInstanceId());
 
         for (TaskInstance task : taskInstances) {
             if (task.getState() == TaskExecutionStatus.FAILURE
@@ -138,8 +142,8 @@ public class TaskInstanceDaoImpl extends BaseDao<TaskInstance, TaskInstanceMappe
     }
 
     @Override
-    public List<TaskInstance> queryValidTaskListByWorkflowInstanceId(Integer processInstanceId, int testFlag) {
-        return mybatisMapper.findValidTaskListByWorkflowInstanceId(processInstanceId, Flag.YES, testFlag);
+    public List<TaskInstance> queryValidTaskListByWorkflowInstanceId(Integer processInstanceId) {
+        return mybatisMapper.findValidTaskListByWorkflowInstanceId(processInstanceId, Flag.YES);
     }
 
     @Override
@@ -150,8 +154,7 @@ public class TaskInstanceDaoImpl extends BaseDao<TaskInstance, TaskInstanceMappe
     @Override
     public List<TaskInstance> queryPreviousTaskListByWorkflowInstanceId(Integer workflowInstanceId) {
         WorkflowInstance workflowInstance = workflowInstanceMapper.selectById(workflowInstanceId);
-        return mybatisMapper.findValidTaskListByWorkflowInstanceId(workflowInstanceId, Flag.NO,
-                workflowInstance.getTestFlag());
+        return mybatisMapper.findValidTaskListByWorkflowInstanceId(workflowInstanceId, Flag.NO);
     }
 
     @Override
@@ -166,15 +169,13 @@ public class TaskInstanceDaoImpl extends BaseDao<TaskInstance, TaskInstanceMappe
 
     @Override
     public List<TaskInstance> queryLastTaskInstanceListIntervalInWorkflowInstance(Integer workflowInstanceId,
-                                                                                  Set<Long> taskCodes,
-                                                                                  int testFlag) {
-        return mybatisMapper.findLastTaskInstances(workflowInstanceId, taskCodes, testFlag);
+                                                                                  Set<Long> taskCodes) {
+        return mybatisMapper.findLastTaskInstances(workflowInstanceId, taskCodes);
     }
 
     @Override
-    public TaskInstance queryLastTaskInstanceIntervalInWorkflowInstance(Integer workflowInstanceId, long depTaskCode,
-                                                                        int testFlag) {
-        return mybatisMapper.findLastTaskInstance(workflowInstanceId, depTaskCode, testFlag);
+    public TaskInstance queryLastTaskInstanceIntervalInWorkflowInstance(Integer workflowInstanceId, long depTaskCode) {
+        return mybatisMapper.findLastTaskInstance(workflowInstanceId, depTaskCode);
     }
 
     @Override
@@ -182,5 +183,53 @@ public class TaskInstanceDaoImpl extends BaseDao<TaskInstance, TaskInstanceMappe
                                         TaskExecutionStatus originState,
                                         TaskExecutionStatus targetState) {
         mybatisMapper.updateTaskInstanceState(taskInstanceId, originState.getCode(), targetState.getCode());
+    }
+
+    @Override
+    public List<TaskInstanceStatusCountDto> countTaskInstanceStateByProjectCodes(Date startTime,
+                                                                                 Date endTime,
+                                                                                 Collection<Long> projectCodes) {
+        return mybatisMapper.countTaskInstanceStateByProjectCodes(startTime, endTime, projectCodes);
+    }
+
+    @Override
+    public List<TaskInstance> queryByWorkflowInstanceIdsAndTaskCodes(List<Integer> workflowInstanceIds,
+                                                                     List<Long> taskCodes) {
+        return mybatisMapper.queryByWorkflowInstanceIdsAndTaskCodes(workflowInstanceIds, taskCodes);
+    }
+
+    @Override
+    public IPage<TaskInstance> queryTaskInstanceListPaging(IPage<TaskInstance> page,
+                                                           Long projectCode,
+                                                           Integer workflowInstanceId,
+                                                           String workflowInstanceName,
+                                                           String searchVal,
+                                                           String taskName,
+                                                           Long taskCode,
+                                                           String executorName,
+                                                           int[] statusArray,
+                                                           String host,
+                                                           TaskExecuteType taskExecuteType,
+                                                           Date startTime,
+                                                           Date endTime) {
+        return mybatisMapper.queryTaskInstanceListPaging(page, projectCode, workflowInstanceId, workflowInstanceName,
+                searchVal, taskName, taskCode, executorName, statusArray, host, taskExecuteType, startTime, endTime);
+    }
+
+    @Override
+    public IPage<TaskInstance> queryStreamTaskInstanceListPaging(IPage<TaskInstance> page,
+                                                                 Long projectCode,
+                                                                 String workflowDefinitionName,
+                                                                 String searchVal,
+                                                                 String taskName,
+                                                                 Long taskCode,
+                                                                 String executorName,
+                                                                 int[] statusArray,
+                                                                 String host,
+                                                                 TaskExecuteType taskExecuteType,
+                                                                 Date startTime,
+                                                                 Date endTime) {
+        return mybatisMapper.queryStreamTaskInstanceListPaging(page, projectCode, workflowDefinitionName, searchVal,
+                taskName, taskCode, executorName, statusArray, host, taskExecuteType, startTime, endTime);
     }
 }

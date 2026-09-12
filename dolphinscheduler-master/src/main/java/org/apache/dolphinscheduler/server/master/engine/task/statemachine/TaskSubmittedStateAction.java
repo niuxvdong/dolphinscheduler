@@ -21,6 +21,8 @@ import org.apache.dolphinscheduler.common.utils.DateUtils;
 import org.apache.dolphinscheduler.dao.entity.TaskInstance;
 import org.apache.dolphinscheduler.dao.repository.TaskInstanceDao;
 import org.apache.dolphinscheduler.plugin.task.api.enums.TaskExecutionStatus;
+import org.apache.dolphinscheduler.server.master.engine.task.dispatcher.WorkerGroupDispatcherCoordinator;
+import org.apache.dolphinscheduler.server.master.engine.task.execution.ITaskExecution;
 import org.apache.dolphinscheduler.server.master.engine.task.lifecycle.event.TaskDispatchLifecycleEvent;
 import org.apache.dolphinscheduler.server.master.engine.task.lifecycle.event.TaskDispatchedLifecycleEvent;
 import org.apache.dolphinscheduler.server.master.engine.task.lifecycle.event.TaskFailedLifecycleEvent;
@@ -33,9 +35,11 @@ import org.apache.dolphinscheduler.server.master.engine.task.lifecycle.event.Tas
 import org.apache.dolphinscheduler.server.master.engine.task.lifecycle.event.TaskRunningLifecycleEvent;
 import org.apache.dolphinscheduler.server.master.engine.task.lifecycle.event.TaskStartLifecycleEvent;
 import org.apache.dolphinscheduler.server.master.engine.task.lifecycle.event.TaskSuccessLifecycleEvent;
-import org.apache.dolphinscheduler.server.master.engine.task.runnable.ITaskExecutionRunnable;
-import org.apache.dolphinscheduler.server.master.engine.workflow.runnable.IWorkflowExecutionRunnable;
-import org.apache.dolphinscheduler.server.master.runner.GlobalTaskDispatchWaitingQueue;
+import org.apache.dolphinscheduler.server.master.engine.workflow.execution.IWorkflowExecution;
+import org.apache.dolphinscheduler.server.master.exception.TaskExecutionContextCreateException;
+import org.apache.dolphinscheduler.server.master.utils.ExceptionUtils;
+
+import java.util.concurrent.TimeUnit;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -50,52 +54,52 @@ import org.springframework.stereotype.Component;
 public class TaskSubmittedStateAction extends AbstractTaskStateAction {
 
     @Autowired
-    private GlobalTaskDispatchWaitingQueue globalTaskDispatchWaitingQueue;
+    private WorkerGroupDispatcherCoordinator workerGroupDispatcherCoordinator;
 
     @Autowired
     private TaskInstanceDao taskInstanceDao;
 
     @Override
-    public void startEventAction(final IWorkflowExecutionRunnable workflowExecutionRunnable,
-                                 final ITaskExecutionRunnable taskExecutionRunnable,
-                                 final TaskStartLifecycleEvent taskStartEvent) {
-        throwExceptionIfStateIsNotMatch(taskExecutionRunnable);
+    public void onStartEvent(final IWorkflowExecution workflowExecution,
+                             final ITaskExecution taskExecution,
+                             final TaskStartLifecycleEvent taskStartEvent) {
+        throwExceptionIfStateIsNotMatch(taskExecution);
 
-        if (workflowExecutionRunnable.isWorkflowReadyPause()) {
-            workflowExecutionRunnable.getWorkflowEventBus().publish(TaskPausedLifecycleEvent.of(taskExecutionRunnable));
+        if (workflowExecution.isWorkflowReadyPause()) {
+            workflowExecution.getWorkflowEventBus().publish(TaskPausedLifecycleEvent.of(taskExecution));
             return;
         }
 
-        if (workflowExecutionRunnable.isWorkflowReadyStop()) {
-            workflowExecutionRunnable.getWorkflowEventBus().publish(TaskKilledLifecycleEvent.of(taskExecutionRunnable));
+        if (workflowExecution.isWorkflowReadyStop()) {
+            workflowExecution.getWorkflowEventBus().publish(TaskKilledLifecycleEvent.of(taskExecution));
             return;
         }
 
-        tryToDispatchTask(taskExecutionRunnable);
+        tryToDispatchTask(taskExecution);
     }
 
     @Override
-    public void startedEventAction(final IWorkflowExecutionRunnable workflowExecutionRunnable,
-                                   final ITaskExecutionRunnable taskExecutionRunnable,
-                                   final TaskRunningLifecycleEvent taskRunningEvent) {
-        throwExceptionIfStateIsNotMatch(taskExecutionRunnable);
-        logWarningIfCannotDoAction(taskExecutionRunnable, taskRunningEvent);
+    public void onStartedEvent(final IWorkflowExecution workflowExecution,
+                               final ITaskExecution taskExecution,
+                               final TaskRunningLifecycleEvent taskRunningEvent) {
+        throwExceptionIfStateIsNotMatch(taskExecution);
+        logWarningIfCannotDoAction(taskExecution, taskRunningEvent);
     }
 
     @Override
-    public void retryEventAction(final IWorkflowExecutionRunnable workflowExecutionRunnable,
-                                 final ITaskExecutionRunnable taskExecutionRunnable,
-                                 final TaskRetryLifecycleEvent taskRetryEvent) {
-        throwExceptionIfStateIsNotMatch(taskExecutionRunnable);
-        logWarningIfCannotDoAction(taskExecutionRunnable, taskRetryEvent);
+    public void onRetryEvent(final IWorkflowExecution workflowExecution,
+                             final ITaskExecution taskExecution,
+                             final TaskRetryLifecycleEvent taskRetryEvent) {
+        throwExceptionIfStateIsNotMatch(taskExecution);
+        logWarningIfCannotDoAction(taskExecution, taskRetryEvent);
     }
 
     @Override
-    public void dispatchEventAction(final IWorkflowExecutionRunnable workflowExecutionRunnable,
-                                    final ITaskExecutionRunnable taskExecutionRunnable,
-                                    final TaskDispatchLifecycleEvent taskDispatchEvent) {
-        throwExceptionIfStateIsNotMatch(taskExecutionRunnable);
-        final TaskInstance taskInstance = taskExecutionRunnable.getTaskInstance();
+    public void onDispatchEvent(final IWorkflowExecution workflowExecution,
+                                final ITaskExecution taskExecution,
+                                final TaskDispatchLifecycleEvent taskDispatchEvent) {
+        throwExceptionIfStateIsNotMatch(taskExecution);
+        final TaskInstance taskInstance = taskExecution.getTaskInstance();
         long remainTimeMills = DateUtils.getRemainTime(
                 taskInstance.getFirstSubmitTime(),
                 taskInstance.getDelayTime() * 60L) * 1_000;
@@ -107,81 +111,110 @@ public class TaskSubmittedStateAction extends AbstractTaskStateAction {
                     taskInstance.getDelayTime(),
                     remainTimeMills);
         }
-        globalTaskDispatchWaitingQueue.dispatchTaskExecuteRunnableWithDelay(taskExecutionRunnable, remainTimeMills);
+
+        try {
+            taskExecution.initializeTaskExecutionContext();
+        } catch (Exception ex) {
+            if (ExceptionUtils.isDatabaseConnectedFailedException(ex)) {
+                throw ex;
+            }
+            log.error("Failed to initialize task execution context, taskName: {}", taskInstance.getName(), ex);
+            throw new TaskExecutionContextCreateException(ex.getMessage());
+        }
+
+        workerGroupDispatcherCoordinator.dispatchTask(taskExecution, remainTimeMills);
     }
 
     @Override
-    public void dispatchedEventAction(final IWorkflowExecutionRunnable workflowExecutionRunnable,
-                                      final ITaskExecutionRunnable taskExecutionRunnable,
-                                      final TaskDispatchedLifecycleEvent taskDispatchedEvent) {
-        throwExceptionIfStateIsNotMatch(taskExecutionRunnable);
-        super.dispatchedEventAction(workflowExecutionRunnable, taskExecutionRunnable, taskDispatchedEvent);
+    public void onDispatchedEvent(final IWorkflowExecution workflowExecution,
+                                  final ITaskExecution taskExecution,
+                                  final TaskDispatchedLifecycleEvent taskDispatchedEvent) {
+        throwExceptionIfStateIsNotMatch(taskExecution);
+        super.onDispatchedEvent(workflowExecution, taskExecution, taskDispatchedEvent);
     }
 
     @Override
-    public void pauseEventAction(final IWorkflowExecutionRunnable workflowExecutionRunnable,
-                                 final ITaskExecutionRunnable taskExecutionRunnable,
-                                 final TaskPauseLifecycleEvent taskPauseEvent) {
-        throwExceptionIfStateIsNotMatch(taskExecutionRunnable);
-        if (globalTaskDispatchWaitingQueue.markTaskExecutionRunnableRemoved(taskExecutionRunnable)) {
-            log.info("Success pause task: {} before dispatch", taskExecutionRunnable.getName());
-            taskExecutionRunnable.getWorkflowEventBus().publish(TaskPausedLifecycleEvent.of(taskExecutionRunnable));
+    public void onPauseEvent(final IWorkflowExecution workflowExecution,
+                             final ITaskExecution taskExecution,
+                             final TaskPauseLifecycleEvent taskPauseEvent) {
+        throwExceptionIfStateIsNotMatch(taskExecution);
+        if (workerGroupDispatcherCoordinator.removeTask(taskExecution)) {
+            log.info("Success pause task: {} before dispatch", taskExecution.getName());
+            taskExecution.getWorkflowEventBus().publish(TaskPausedLifecycleEvent.of(taskExecution));
             return;
         }
-        logWarningIfCannotDoAction(taskExecutionRunnable, taskPauseEvent);
-    }
-
-    @Override
-    public void pausedEventAction(final IWorkflowExecutionRunnable workflowExecutionRunnable,
-                                  final ITaskExecutionRunnable taskExecutionRunnable,
-                                  final TaskPausedLifecycleEvent taskPausedEvent) {
-        throwExceptionIfStateIsNotMatch(taskExecutionRunnable);
-        super.pausedEventAction(workflowExecutionRunnable, taskExecutionRunnable, taskPausedEvent);
-    }
-
-    @Override
-    public void killEventAction(final IWorkflowExecutionRunnable workflowExecutionRunnable,
-                                final ITaskExecutionRunnable taskExecutionRunnable,
-                                final TaskKillLifecycleEvent taskKillEvent) {
-        throwExceptionIfStateIsNotMatch(taskExecutionRunnable);
-        if (globalTaskDispatchWaitingQueue.markTaskExecutionRunnableRemoved(taskExecutionRunnable)) {
-            log.info("Success kill task: {} before dispatch", taskExecutionRunnable.getName());
-            taskExecutionRunnable.getWorkflowEventBus().publish(TaskKilledLifecycleEvent.of(taskExecutionRunnable));
+        if (taskExecution.getTaskInstance().getTaskGroupId() > 0
+                && taskGroupCoordinator.releaseWaitingTaskGroupSlot(taskExecution.getTaskInstance())) {
+            log.info("Success pause task: {} while waiting for TaskGroup slot", taskExecution.getName());
+            taskExecution.getWorkflowEventBus().publish(TaskPausedLifecycleEvent.of(taskExecution));
             return;
         }
-        logWarningIfCannotDoAction(taskExecutionRunnable, taskKillEvent);
+        log.info("The task[id={}] is submitted and already dispatched, cannot pause, will try to pause it after 5s",
+                taskExecution.getId());
+        taskExecution.getWorkflowEventBus()
+                .publish(TaskPauseLifecycleEvent.of(taskExecution, TimeUnit.SECONDS.toMillis(5)));
     }
 
     @Override
-    public void killedEventAction(final IWorkflowExecutionRunnable workflowExecutionRunnable,
-                                  final ITaskExecutionRunnable taskExecutionRunnable,
-                                  final TaskKilledLifecycleEvent taskKilledEvent) {
-        throwExceptionIfStateIsNotMatch(taskExecutionRunnable);
-        super.killedEventAction(workflowExecutionRunnable, taskExecutionRunnable, taskKilledEvent);
+    public void onPausedEvent(final IWorkflowExecution workflowExecution,
+                              final ITaskExecution taskExecution,
+                              final TaskPausedLifecycleEvent taskPausedEvent) {
+        throwExceptionIfStateIsNotMatch(taskExecution);
+        super.onPausedEvent(workflowExecution, taskExecution, taskPausedEvent);
     }
 
     @Override
-    public void failedEventAction(final IWorkflowExecutionRunnable workflowExecutionRunnable,
-                                  final ITaskExecutionRunnable taskExecutionRunnable,
-                                  final TaskFailedLifecycleEvent taskFailedEvent) {
-        throwExceptionIfStateIsNotMatch(taskExecutionRunnable);
-        super.failedEventAction(workflowExecutionRunnable, taskExecutionRunnable, taskFailedEvent);
+    public void onKillEvent(final IWorkflowExecution workflowExecution,
+                            final ITaskExecution taskExecution,
+                            final TaskKillLifecycleEvent taskKillEvent) {
+        throwExceptionIfStateIsNotMatch(taskExecution);
+        if (workerGroupDispatcherCoordinator.removeTask(taskExecution)) {
+            log.info("Success kill task[id={}] before dispatch", taskExecution.getId());
+            taskExecution.getWorkflowEventBus().publish(TaskKilledLifecycleEvent.of(taskExecution));
+            return;
+        }
+        if (taskExecution.getTaskInstance().getTaskGroupId() > 0
+                && taskGroupCoordinator.releaseWaitingTaskGroupSlot(taskExecution.getTaskInstance())) {
+            log.info("Success kill task: {} while waiting for TaskGroup slot", taskExecution.getName());
+            taskExecution.getWorkflowEventBus().publish(TaskKilledLifecycleEvent.of(taskExecution));
+            return;
+        }
+        log.info("The task[id={}] is submitted and already dispatched, cannot kill, will kill it after 5s",
+                taskExecution.getId());
+        taskExecution.getWorkflowEventBus()
+                .publish(TaskKillLifecycleEvent.of(taskExecution, TimeUnit.SECONDS.toMillis(5)));
     }
 
     @Override
-    public void succeedEventAction(final IWorkflowExecutionRunnable workflowExecutionRunnable,
-                                   final ITaskExecutionRunnable taskExecutionRunnable,
-                                   final TaskSuccessLifecycleEvent taskSuccessEvent) {
-        throwExceptionIfStateIsNotMatch(taskExecutionRunnable);
-        logWarningIfCannotDoAction(taskExecutionRunnable, taskSuccessEvent);
+    public void onKilledEvent(final IWorkflowExecution workflowExecution,
+                              final ITaskExecution taskExecution,
+                              final TaskKilledLifecycleEvent taskKilledEvent) {
+        throwExceptionIfStateIsNotMatch(taskExecution);
+        super.onKilledEvent(workflowExecution, taskExecution, taskKilledEvent);
     }
 
     @Override
-    public void failoverEventAction(final IWorkflowExecutionRunnable workflowExecutionRunnable,
-                                    final ITaskExecutionRunnable taskExecutionRunnable,
-                                    final TaskFailoverLifecycleEvent taskFailoverEvent) {
-        throwExceptionIfStateIsNotMatch(taskExecutionRunnable);
-        logWarningIfCannotDoAction(taskExecutionRunnable, taskFailoverEvent);
+    public void onFailedEvent(final IWorkflowExecution workflowExecution,
+                              final ITaskExecution taskExecution,
+                              final TaskFailedLifecycleEvent taskFailedEvent) {
+        throwExceptionIfStateIsNotMatch(taskExecution);
+        super.onFailedEvent(workflowExecution, taskExecution, taskFailedEvent);
+    }
+
+    @Override
+    public void onSucceedEvent(final IWorkflowExecution workflowExecution,
+                               final ITaskExecution taskExecution,
+                               final TaskSuccessLifecycleEvent taskSuccessEvent) {
+        throwExceptionIfStateIsNotMatch(taskExecution);
+        logWarningIfCannotDoAction(taskExecution, taskSuccessEvent);
+    }
+
+    @Override
+    public void onFailoverEvent(final IWorkflowExecution workflowExecution,
+                                final ITaskExecution taskExecution,
+                                final TaskFailoverLifecycleEvent taskFailoverEvent) {
+        throwExceptionIfStateIsNotMatch(taskExecution);
+        logWarningIfCannotDoAction(taskExecution, taskFailoverEvent);
     }
 
     @Override

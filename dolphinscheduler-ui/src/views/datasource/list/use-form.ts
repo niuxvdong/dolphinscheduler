@@ -68,7 +68,7 @@ export function useForm(id?: number) {
     showMode: false,
     showDataBaseName: true,
     showJDBCConnectParameters: true,
-    showPublicKey: false,
+    showPrivateKey: false,
     showNamespace: false,
     showKubeConfig: false,
     showAccessKeyId: false,
@@ -197,14 +197,6 @@ export function useForm(id?: number) {
           }
         }
       }
-      // databaseUserName: {
-      //   trigger: ['input'],
-      //   validator() {
-      //     if (!state.detailForm.userName) {
-      //       return new Error(t('datasource.user_name_tips'))
-      //     }
-      //   }
-      // },
     } as FormRules,
     modeOptions: [
       {
@@ -250,7 +242,8 @@ export function useForm(id?: number) {
     state.detailForm.port = options.previousPort || options.defaultPort
     state.detailForm.type = type
 
-    state.requiredDataBase = type !== 'POSTGRESQL' && type !== 'ATHENA'
+    state.requiredDataBase =
+      type !== 'POSTGRESQL' && type !== 'ATHENA' && type !== 'DOLPHINDB'
 
     state.showHost = type !== 'ATHENA'
     state.showPort = type !== 'ATHENA'
@@ -275,14 +268,19 @@ export function useForm(id?: number) {
       type === 'ZEPPELIN' ||
       type === 'SAGEMAKER' ||
       type === 'K8S' ||
-      type === 'ALIYUN_SERVERLESS_SPARK'
+      type === 'ALIYUN_SERVERLESS_SPARK' ||
+      type === 'DOLPHINDB'
     ) {
       state.showDataBaseName = false
       state.requiredDataBase = false
       state.showJDBCConnectParameters = false
-      state.showPublicKey = false
+      state.showPrivateKey = false
+      if (type === 'DOLPHINDB') {
+        state.showJDBCConnectParameters = true
+        state.showPrivateKey = false
+      }
       if (type === 'SSH') {
-        state.showPublicKey = true
+        state.showPrivateKey = true
       }
       if (type === 'ZEPPELIN') {
         state.showHost = false
@@ -321,7 +319,7 @@ export function useForm(id?: number) {
       state.showDataBaseName = true
       state.requiredDataBase = true
       state.showJDBCConnectParameters = true
-      state.showPublicKey = false
+      state.showPrivateKey = false
       state.showRestEndpoint = false
       state.showNamespace = false
       state.showKubeConfig = false
@@ -497,6 +495,11 @@ export const datasourceType: IDataBaseOptionKeys = {
     value: 'ALIYUN_SERVERLESS_SPARK',
     label: 'ALIYUN_SERVERLESS_SPARK',
     defaultPort: 0
+  },
+  DOLPHINDB: {
+    value: 'DOLPHINDB',
+    label: 'DOLPHINDB',
+    defaultPort: 8848
   }
 }
 

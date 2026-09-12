@@ -27,9 +27,6 @@ import java.util.List;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 
-/**
- * workflow task relation mapper interface
- */
 public interface WorkflowTaskRelationMapper extends BaseMapper<WorkflowTaskRelation> {
 
     /**
@@ -168,27 +165,10 @@ public interface WorkflowTaskRelationMapper extends BaseMapper<WorkflowTaskRelat
     IPage<WorkflowTaskRelation> filterWorkflowTaskRelation(IPage<WorkflowTaskRelation> page,
                                                            @Param("relation") WorkflowTaskRelation workflowTaskRelation);
 
-    /**
-     * batch update workflow task relation version
-     *
-     * @param workflowTaskRelation workflow task relation list
-     * @return update num
-     */
-    int updateWorkflowTaskRelationTaskVersion(@Param("workflowTaskRelation") WorkflowTaskRelation workflowTaskRelation);
-
     Long queryTaskCodeByTaskName(@Param("workflowCode") Long workflowCode,
                                  @Param("taskName") String taskName);
 
     void deleteByWorkflowDefinitionCodeAndVersion(@Param("workflowDefinitionCode") long workflowDefinitionCode,
                                                   @Param("workflowDefinitionVersion") int workflowDefinitionVersion);
 
-    /**
-     * workflow task relation by taskCode and postTaskVersion
-     *
-     * @param taskCode taskCode
-     * @param postTaskVersion postTaskVersion
-     * @return ProcessTaskRelation
-     */
-    List<WorkflowTaskRelation> queryWorkflowTaskRelationByTaskCodeAndTaskVersion(@Param("taskCode") long taskCode,
-                                                                                 @Param("postTaskVersion") long postTaskVersion);
 }

@@ -286,6 +286,13 @@ interface ITaskParams {
   executorCores?: number
   mainArgs?: string
   others?: string
+  grpcCredentialType?: string
+  grpcServiceDefinition?: string
+  grpcServiceDefinitionJSON?: string
+  methodName?: string
+  message?: string
+  grpcCheckCondition?: string
+  grpcConnectTimeoutMs?: number
   httpMethod?: string
   httpBody?: string
   httpCheckCondition?: string
@@ -297,6 +304,8 @@ interface ITaskParams {
   type?: string
   datasource?: string
   sql?: string
+  sqlSource?: string
+  sqlResource?: string
   sqlType?: string
   sendEmail?: boolean
   displayRows?: number
@@ -333,6 +342,7 @@ interface ITaskParams {
   targetTable?: string
   jobSpeedByte?: number
   jobSpeedRecord?: number
+  jobChannel?: number
   xms?: number
   xmx?: number
   sparkParameters?: ISparkParameters
@@ -340,6 +350,9 @@ interface ITaskParams {
   ruleInputParameter?: IRuleParameters
   jobFlowDefineJson?: string
   stepsDefineJson?: string
+  applicationId?: string
+  executionRoleArn?: string
+  startJobRunRequestJson?: string
   zeppelinNoteId?: string
   zeppelinParagraphId?: string
   zeppelinRestEndpoint?: string
@@ -357,6 +370,7 @@ interface ITaskParams {
   resourceQueueId?: string
   codeType?: string
   engineReleaseVersion?: string
+  templateId?: string
   entryPoint?: string
   entryPointArguments?: string
   sparkSubmitParameters?: string

@@ -18,6 +18,8 @@
 package org.apache.dolphinscheduler.server.master;
 
 import org.apache.dolphinscheduler.dao.DaoConfiguration;
+import org.apache.dolphinscheduler.registry.api.RegistryClient;
+import org.apache.dolphinscheduler.server.master.config.MasterConfig;
 import org.apache.dolphinscheduler.server.master.integration.MasterContainer;
 import org.apache.dolphinscheduler.server.master.integration.Repository;
 import org.apache.dolphinscheduler.server.master.integration.WorkflowOperator;
@@ -25,9 +27,13 @@ import org.apache.dolphinscheduler.server.master.integration.WorkflowTestCaseCon
 
 import lombok.extern.slf4j.Slf4j;
 
+import org.junit.jupiter.api.AfterEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.annotation.DirtiesContext;
+
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Metrics;
 
 /**
  * The abstract class for master integration test.
@@ -37,7 +43,7 @@ import org.springframework.test.annotation.DirtiesContext;
 @Slf4j
 @SpringBootTest(classes = {
         MasterServer.class,
-        DaoConfiguration.class})
+        DaoConfiguration.class}, properties = "spring.config.additional-location=classpath:/spring-it-application.yaml")
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
 public abstract class AbstractMasterIntegrationTestCase {
 
@@ -52,4 +58,25 @@ public abstract class AbstractMasterIntegrationTestCase {
 
     @Autowired
     protected MasterContainer masterContainer;
+
+    @Autowired
+    protected RegistryClient registryClient;
+
+    @Autowired
+    protected MasterConfig masterConfig;
+
+    @Autowired
+    private MeterRegistry meterRegistry;
+
+    /**
+     * Unbind this test method's {@link MeterRegistry} from {@link Metrics#globalRegistry}.
+     * <p>
+     * Spring's metrics auto-configuration adds the per-context registry to {@code globalRegistry}
+     * but does not remove it on teardown, so {@code @DirtiesContext} would otherwise leave dangling
+     * child registries that pollute counter reads in later test methods.
+     */
+    @AfterEach
+    public void unbindMeterRegistryFromGlobal() {
+        Metrics.globalRegistry.remove(meterRegistry);
+    }
 }

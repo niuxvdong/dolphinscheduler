@@ -10,9 +10,6 @@ This node is used to execute tasks of the `Java` type and supports running `jar`
 
 # Task Parameters
 
-[//]: # (TODO: use the commented anchor below once our website template supports this syntax)
-[//]: # (- Please refer to [DolphinScheduler Task Parameters Appendix]&#40;appendix.md#default-task-parameters&#41; `Default Task Parameters` section for default parameters.)
-
 - Please refer to [DolphinScheduler Task Parameters Appendix](appendix.md) `Default Task Parameters` section for default parameters.
 
 |   **Parameter**    |                                                                **Description**                                                                |
@@ -23,6 +20,7 @@ This node is used to execute tasks of the `Java` type and supports running `jar`
 | Main Class Name    | Fully Qualified Name of the Main Class (Optional)                                                                                             |
 | Main Package       | Select the main program package to run the application.                                                                                       |
 | Resources          | External JAR packages or other resource files that are added to the classpath or module path and can be easily retrieved in your JAVA script. |
+| Custom Parameters  | User-defined parameters local to JAVA, will replace content in the main program parameters and JVM parameters like ${variable}.               |
 
 ## Example
 

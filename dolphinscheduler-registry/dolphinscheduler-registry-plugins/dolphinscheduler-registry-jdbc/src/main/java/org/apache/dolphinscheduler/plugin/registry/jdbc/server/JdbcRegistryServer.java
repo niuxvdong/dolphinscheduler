@@ -19,15 +19,15 @@ package org.apache.dolphinscheduler.plugin.registry.jdbc.server;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import org.apache.dolphinscheduler.common.thread.ThreadUtils;
 import org.apache.dolphinscheduler.plugin.registry.jdbc.JdbcRegistryProperties;
-import org.apache.dolphinscheduler.plugin.registry.jdbc.JdbcRegistryThreadFactory;
 import org.apache.dolphinscheduler.plugin.registry.jdbc.client.IJdbcRegistryClient;
 import org.apache.dolphinscheduler.plugin.registry.jdbc.client.JdbcRegistryClientIdentify;
 import org.apache.dolphinscheduler.plugin.registry.jdbc.model.DTO.DataType;
 import org.apache.dolphinscheduler.plugin.registry.jdbc.model.DTO.JdbcRegistryClientHeartbeatDTO;
 import org.apache.dolphinscheduler.plugin.registry.jdbc.model.DTO.JdbcRegistryDataDTO;
 import org.apache.dolphinscheduler.plugin.registry.jdbc.repository.JdbcRegistryClientRepository;
-import org.apache.dolphinscheduler.plugin.registry.jdbc.repository.JdbcRegistryDataChanceEventRepository;
+import org.apache.dolphinscheduler.plugin.registry.jdbc.repository.JdbcRegistryDataChangeEventRepository;
 import org.apache.dolphinscheduler.plugin.registry.jdbc.repository.JdbcRegistryDataRepository;
 import org.apache.dolphinscheduler.plugin.registry.jdbc.repository.JdbcRegistryLockRepository;
 import org.apache.dolphinscheduler.registry.api.RegistryException;
@@ -35,6 +35,7 @@ import org.apache.dolphinscheduler.registry.api.RegistryException;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.time.StopWatch;
 
+import java.util.Collection;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -42,11 +43,14 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.google.common.collect.Lists;
 
@@ -57,8 +61,6 @@ import com.google.common.collect.Lists;
 public class JdbcRegistryServer implements IJdbcRegistryServer {
 
     private final JdbcRegistryProperties jdbcRegistryProperties;
-
-    private final JdbcRegistryDataRepository jdbcRegistryDataRepository;
 
     private final JdbcRegistryLockRepository jdbcRegistryLockRepository;
 
@@ -77,19 +79,25 @@ public class JdbcRegistryServer implements IJdbcRegistryServer {
     private final Map<JdbcRegistryClientIdentify, JdbcRegistryClientHeartbeatDTO> jdbcRegistryClientDTOMap =
             new ConcurrentHashMap<>();
 
+    private final ScheduledExecutorService schedulerThreadExecutor;
+
     private Long lastSuccessHeartbeat;
 
     public JdbcRegistryServer(JdbcRegistryDataRepository jdbcRegistryDataRepository,
                               JdbcRegistryLockRepository jdbcRegistryLockRepository,
                               JdbcRegistryClientRepository jdbcRegistryClientRepository,
-                              JdbcRegistryDataChanceEventRepository jdbcRegistryDataChanceEventRepository,
-                              JdbcRegistryProperties jdbcRegistryProperties) {
-        this.jdbcRegistryDataRepository = checkNotNull(jdbcRegistryDataRepository);
+                              JdbcRegistryDataChangeEventRepository jdbcRegistryDataChangeEventRepository,
+                              JdbcRegistryProperties jdbcRegistryProperties,
+                              TransactionTemplate transactionTemplate) {
         this.jdbcRegistryLockRepository = checkNotNull(jdbcRegistryLockRepository);
         this.jdbcRegistryClientRepository = checkNotNull(jdbcRegistryClientRepository);
         this.jdbcRegistryProperties = checkNotNull(jdbcRegistryProperties);
+        this.schedulerThreadExecutor = ThreadUtils.newDaemonScheduledExecutorService(
+                "ds-jdbc-registry-default-scheduler-thread-%d",
+                Runtime.getRuntime().availableProcessors());
         this.jdbcRegistryDataManager = new JdbcRegistryDataManager(
-                jdbcRegistryProperties, jdbcRegistryDataRepository, jdbcRegistryDataChanceEventRepository);
+                jdbcRegistryProperties, jdbcRegistryDataRepository, jdbcRegistryDataChangeEventRepository,
+                transactionTemplate, schedulerThreadExecutor);
         this.jdbcRegistryLockManager = new JdbcRegistryLockManager(
                 jdbcRegistryProperties, jdbcRegistryLockRepository);
         this.jdbcRegistryServerState = JdbcRegistryServerState.INIT;
@@ -105,7 +113,7 @@ public class JdbcRegistryServer implements IJdbcRegistryServer {
         // Start the Purge thread
         // The Purge thread will clear the invalidated data
         purgeInvalidJdbcRegistryMetadata();
-        JdbcRegistryThreadFactory.getDefaultSchedulerThreadExecutor().scheduleWithFixedDelay(
+        schedulerThreadExecutor.scheduleWithFixedDelay(
                 this::purgeInvalidJdbcRegistryMetadata,
                 jdbcRegistryProperties.getSessionTimeout().toMillis(),
                 jdbcRegistryProperties.getSessionTimeout().toMillis(),
@@ -113,7 +121,7 @@ public class JdbcRegistryServer implements IJdbcRegistryServer {
         jdbcRegistryDataManager.start();
         jdbcRegistryServerState = JdbcRegistryServerState.STARTED;
         doTriggerOnConnectedListener();
-        JdbcRegistryThreadFactory.getDefaultSchedulerThreadExecutor().scheduleWithFixedDelay(
+        schedulerThreadExecutor.scheduleWithFixedDelay(
                 this::refreshClientsHeartbeat,
                 0,
                 jdbcRegistryProperties.getHeartbeatRefreshInterval().toMillis(),
@@ -188,7 +196,8 @@ public class JdbcRegistryServer implements IJdbcRegistryServer {
 
                     @Override
                     public void onRegistryRowDeleted(JdbcRegistryDataDTO data) {
-                        jdbcRegistryDataChangeListener.onJdbcRegistryDataDeleted(data.getDataKey());
+                        jdbcRegistryDataChangeListener.onJdbcRegistryDataDeleted(data.getDataKey(),
+                                data.getDataValue());
                     }
                 });
     }
@@ -248,7 +257,7 @@ public class JdbcRegistryServer implements IJdbcRegistryServer {
     @Override
     public void close() {
         jdbcRegistryServerState = JdbcRegistryServerState.STOPPED;
-        JdbcRegistryThreadFactory.getDefaultSchedulerThreadExecutor().shutdown();
+        schedulerThreadExecutor.shutdown();
         List<Long> clientIds = jdbcRegistryClients.stream()
                 .map(IJdbcRegistryClient::getJdbcRegistryClientIdentify)
                 .map(JdbcRegistryClientIdentify::getClientId)
@@ -265,17 +274,18 @@ public class JdbcRegistryServer implements IJdbcRegistryServer {
         }
         // remove the client which is already dead from the registry, and remove it's related data and lock.
         final List<JdbcRegistryClientHeartbeatDTO> jdbcRegistryClients = jdbcRegistryClientRepository.queryAll();
-        final List<Long> deadJdbcRegistryClientIds = jdbcRegistryClients
+        final Set<Long> deadJdbcRegistryClientIds = jdbcRegistryClients
                 .stream()
                 .filter(JdbcRegistryClientHeartbeatDTO::isDead)
                 .map(JdbcRegistryClientHeartbeatDTO::getId)
-                .collect(Collectors.toList());
+                .collect(Collectors.toSet());
         doPurgeJdbcRegistryClientInDB(deadJdbcRegistryClientIds);
 
         // remove the data and lock which client is not exist.
         final Set<Long> existJdbcRegistryClientIds = jdbcRegistryClients
                 .stream()
                 .map(JdbcRegistryClientHeartbeatDTO::getId)
+                .filter(id -> !deadJdbcRegistryClientIds.contains(id))
                 .collect(Collectors.toSet());
         jdbcRegistryDataManager.getAllJdbcRegistryData()
                 .stream()
@@ -298,13 +308,11 @@ public class JdbcRegistryServer implements IJdbcRegistryServer {
         log.debug("Success purge invalid jdbcRegistryMetadata, cost: {} ms", stopWatch.getTime());
     }
 
-    private void doPurgeJdbcRegistryClientInDB(final List<Long> jdbcRegistryClientIds) {
+    private void doPurgeJdbcRegistryClientInDB(final Collection<Long> jdbcRegistryClientIds) {
         if (CollectionUtils.isEmpty(jdbcRegistryClientIds)) {
             return;
         }
         log.info("Begin to delete dead jdbcRegistryClient: {}", jdbcRegistryClientIds);
-        jdbcRegistryDataRepository.deleteEphemeralDateByClientIds(jdbcRegistryClientIds);
-        jdbcRegistryLockRepository.deleteByClientIds(jdbcRegistryClientIds);
         jdbcRegistryClientRepository.deleteByIds(jdbcRegistryClientIds);
         log.info("Success delete dead jdbcRegistryClient: {}", jdbcRegistryClientIds);
     }

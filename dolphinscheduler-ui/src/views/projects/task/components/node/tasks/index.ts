@@ -22,6 +22,7 @@ import { useSubWorkflow } from './use-sub-workflow'
 import { usePython } from './use-python'
 import { useSpark } from './use-spark'
 import { useMr } from './use-mr'
+import { useGrpc } from './use-grpc'
 import { useHttp } from './use-http'
 import { useSql } from './use-sql'
 import { useProcedure } from './use-procedure'
@@ -32,6 +33,7 @@ import { useConditions } from './use-conditions'
 import { useDataX } from './use-datax'
 import { useDependent } from './use-dependent'
 import { useEmr } from './use-emr'
+import { useEmrServerless } from './use-emr-serverless'
 import { useZeppelin } from './use-zeppelin'
 import { useK8s } from './use-k8s'
 import { useJupyter } from './use-jupyter'
@@ -42,7 +44,6 @@ import { useJava } from './use-java'
 import { useDinky } from './use-dinky'
 import { userSagemaker } from './use-sagemaker'
 import { useChunjun } from './use-chunjun'
-import { usePytorch } from './use-pytorch'
 import { useHiveCli } from './use-hive-cli'
 import { useDms } from './use-dms'
 import { useDatasync } from './use-datasync'
@@ -59,6 +60,7 @@ export default {
   SPARK: useSpark,
   MR: useMr,
   FLINK: useFlink,
+  GRPC: useGrpc,
   HTTP: useHttp,
   SQL: useSql,
   PROCEDURE: useProcedure,
@@ -69,6 +71,7 @@ export default {
   DATAX: useDataX,
   DEPENDENT: useDependent,
   EMR: useEmr,
+  EMR_SERVERLESS: useEmrServerless,
   ZEPPELIN: useZeppelin,
   K8S: useK8s,
   JUPYTER: useJupyter,
@@ -80,7 +83,6 @@ export default {
   CHUNJUN: useChunjun,
   FLINK_STREAM: useFlinkStream,
   JAVA: useJava,
-  PYTORCH: usePytorch,
   HIVECLI: useHiveCli,
   DMS: useDms,
   DATASYNC: useDatasync,

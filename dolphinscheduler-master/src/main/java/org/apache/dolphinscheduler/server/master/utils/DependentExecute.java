@@ -22,12 +22,12 @@ import static org.apache.dolphinscheduler.plugin.task.api.parameters.DependentPa
 import org.apache.dolphinscheduler.common.constants.Constants;
 import org.apache.dolphinscheduler.common.enums.Flag;
 import org.apache.dolphinscheduler.common.enums.TaskExecuteType;
-import org.apache.dolphinscheduler.common.utils.JSONUtils;
 import org.apache.dolphinscheduler.dao.entity.TaskDefinition;
 import org.apache.dolphinscheduler.dao.entity.TaskDefinitionLog;
 import org.apache.dolphinscheduler.dao.entity.TaskInstance;
 import org.apache.dolphinscheduler.dao.entity.WorkflowInstance;
 import org.apache.dolphinscheduler.dao.entity.WorkflowTaskRelation;
+import org.apache.dolphinscheduler.dao.model.WorkflowInstanceSummaryDto;
 import org.apache.dolphinscheduler.dao.repository.TaskDefinitionDao;
 import org.apache.dolphinscheduler.dao.repository.TaskDefinitionLogDao;
 import org.apache.dolphinscheduler.dao.repository.TaskInstanceDao;
@@ -41,6 +41,7 @@ import org.apache.dolphinscheduler.plugin.task.api.model.DependentItem;
 import org.apache.dolphinscheduler.plugin.task.api.model.Property;
 import org.apache.dolphinscheduler.plugin.task.api.parameters.DependentParameters;
 import org.apache.dolphinscheduler.plugin.task.api.utils.DependentUtils;
+import org.apache.dolphinscheduler.plugin.task.api.utils.VarPoolUtils;
 import org.apache.dolphinscheduler.service.bean.SpringApplicationContext;
 import org.apache.dolphinscheduler.service.process.ProcessService;
 
@@ -68,9 +69,6 @@ public class DependentExecute {
 
     private final TaskInstanceDao taskInstanceDao = SpringApplicationContext.getBean(TaskInstanceDao.class);
 
-    /**
-     * depend item list
-     */
     private List<DependentItem> dependItemList;
 
     /**
@@ -82,26 +80,14 @@ public class DependentExecute {
 
     private TaskInstance taskInstance;
 
-    /**
-     * depend result map
-     */
     @Getter
     private Map<String, DependResult> dependResultMap = new HashMap<>();
 
-    /**
-     * process service
-     */
     private final ProcessService processService = SpringApplicationContext.getBean(ProcessService.class);
 
-    /**
-     * task definition log dao
-     */
     private final TaskDefinitionLogDao taskDefinitionLogDao =
             SpringApplicationContext.getBean(TaskDefinitionLogDao.class);
 
-    /**
-     * task definition dao
-     */
     private final TaskDefinitionDao taskDefinitionDao = SpringApplicationContext.getBean(TaskDefinitionDao.class);
 
     @Getter
@@ -135,10 +121,10 @@ public class DependentExecute {
      * @param currentTime   current time
      * @return DependResult
      */
-    private DependResult getDependentResultForItem(DependentItem dependentItem, Date currentTime, int testFlag) {
+    private DependResult getDependentResultForItem(DependentItem dependentItem, Date currentTime) {
         List<DateInterval> dateIntervals =
                 DependentUtils.getDateIntervalList(currentTime, dependentItem.getDateValue());
-        return calculateResultForTasks(dependentItem, dateIntervals, testFlag);
+        return calculateResultForTasks(dependentItem, dateIntervals);
     }
 
     /**
@@ -149,14 +135,13 @@ public class DependentExecute {
      * @return dateIntervals
      */
     private DependResult calculateResultForTasks(DependentItem dependentItem,
-                                                 List<DateInterval> dateIntervals,
-                                                 int testFlag) {
+                                                 List<DateInterval> dateIntervals) {
 
         DependResult result = DependResult.FAILED;
         for (DateInterval dateInterval : dateIntervals) {
             WorkflowInstance workflowInstance =
-                    findLastWorkflowInterval(dependentItem.getDefinitionCode(), dependentItem.getDepTaskCode(),
-                            dateInterval, testFlag);
+                    findDependentWorkflowCandidate(dependentItem.getDefinitionCode(), dependentItem.getDepTaskCode(),
+                            dateInterval);
             if (workflowInstance == null) {
                 return DependResult.WAITING;
             }
@@ -164,9 +149,9 @@ public class DependentExecute {
             if (dependentItem.getDepTaskCode() == Constants.DEPENDENT_WORKFLOW_CODE) {
                 result = dependResultByWorkflowInstance(workflowInstance);
             } else if (dependentItem.getDepTaskCode() == Constants.DEPENDENT_ALL_TASK_CODE) {
-                result = dependResultByAllTaskOfWorkflowInstance(workflowInstance, testFlag);
+                result = dependResultByAllTaskOfWorkflowInstance(workflowInstance);
             } else {
-                result = dependResultBySingleTaskInstance(workflowInstance, dependentItem.getDepTaskCode(), testFlag);
+                result = dependResultBySingleTaskInstance(workflowInstance, dependentItem.getDepTaskCode());
             }
             if (result != DependResult.SUCCESS) {
                 break;
@@ -181,7 +166,7 @@ public class DependentExecute {
      * @return
      */
     private DependResult dependResultByWorkflowInstance(WorkflowInstance workflowInstance) {
-        if (!workflowInstance.getState().isFinished()) {
+        if (!workflowInstance.getState().isFinalState()) {
             return DependResult.WAITING;
         }
         if (workflowInstance.getState().isSuccess()) {
@@ -199,8 +184,8 @@ public class DependentExecute {
      *
      * @return
      */
-    private DependResult dependResultByAllTaskOfWorkflowInstance(WorkflowInstance workflowInstance, int testFlag) {
-        if (!workflowInstance.getState().isFinished()) {
+    private DependResult dependResultByAllTaskOfWorkflowInstance(WorkflowInstance workflowInstance) {
+        if (!workflowInstance.getState().isFinalState()) {
             log.info(
                     "Wait for the dependent workflow to complete, workflowDefinitionCode: {}, pworkflowInstanceId: {}.",
                     workflowInstance.getWorkflowDefinitionCode(), workflowInstance.getId());
@@ -218,7 +203,7 @@ public class DependentExecute {
 
             List<TaskInstance> taskInstanceList =
                     taskInstanceDao.queryLastTaskInstanceListIntervalInWorkflowInstance(workflowInstance.getId(),
-                            taskDefinitionCodeMap.keySet(), testFlag);
+                            taskDefinitionCodeMap.keySet());
             Map<Long, TaskExecutionStatus> taskExecutionStatusMap =
                     taskInstanceList.stream()
                             .filter(taskInstance -> taskInstance.getTaskExecuteType() != TaskExecuteType.STREAM)
@@ -250,14 +235,12 @@ public class DependentExecute {
      *
      * @param workflowInstance last workflow instance in the date interval
      * @param depTaskCode the dependent task code
-     * @param testFlag test flag
      * @return depend result
      */
-    private DependResult dependResultBySingleTaskInstance(WorkflowInstance workflowInstance, long depTaskCode,
-                                                          int testFlag) {
+    private DependResult dependResultBySingleTaskInstance(WorkflowInstance workflowInstance, long depTaskCode) {
         TaskInstance taskInstance =
                 taskInstanceDao.queryLastTaskInstanceIntervalInWorkflowInstance(workflowInstance.getId(),
-                        depTaskCode, testFlag);
+                        depTaskCode);
 
         if (taskInstance == null) {
             TaskDefinition taskDefinition = taskDefinitionDao.queryByCode(depTaskCode);
@@ -275,7 +258,7 @@ public class DependentExecute {
                 return DependResult.SUCCESS;
             }
 
-            if (!workflowInstance.getState().isFinished()) {
+            if (!workflowInstance.getState().isFinalState()) {
                 log.info(
                         "Wait for the dependent workflow to complete, workflowDefinitionCode: {}, workflowInstanceId: {}.",
                         workflowInstance.getWorkflowDefinitionCode(), workflowInstance.getId());
@@ -302,7 +285,7 @@ public class DependentExecute {
      * @param endTime
      */
     private void addItemVarPool(String varPoolStr, Long endTime) {
-        List<Property> varPool = new ArrayList<>(JSONUtils.toList(varPoolStr, Property.class));
+        List<Property> varPool = new ArrayList<>(VarPoolUtils.deserializeVarPool(varPoolStr));
         if (!varPool.isEmpty()) {
             Map<String, Property> varPoolPropertyMap = varPool.stream().filter(p -> p.getDirect().equals(Direct.OUT))
                     .collect(Collectors.toMap(Property::getProp, Function.identity()));
@@ -314,24 +297,29 @@ public class DependentExecute {
     }
 
     /**
-     * find the last one workflow instance that :
-     * 1. manual run and finish between the interval
-     * 2. schedule run and schedule time between the interval
+     * find the last one workflow instance that:
+     * 1. running workflow instance in the date interval
+     * 2. manual run and finish between the interval
+     * 3. schedule run and schedule time between the interval
      *
      * @param definitionCode definition code
      * @param taskCode task code
      * @param dateInterval   date interval
      * @return workflowInstance
      */
-    private WorkflowInstance findLastWorkflowInterval(Long definitionCode, Long taskCode, DateInterval dateInterval,
-                                                      int testFlag) {
+    private WorkflowInstance findDependentWorkflowCandidate(Long definitionCode, Long taskCode,
+                                                            DateInterval dateInterval) {
+        WorkflowInstance runningWorkflow =
+                workflowInstanceDao.queryLastRunningWorkflowInterval(definitionCode, dateInterval);
+        if (runningWorkflow != null) {
+            return runningWorkflow;
+        }
 
         WorkflowInstance lastSchedulerWorkflowInstance =
-                workflowInstanceDao.queryLastSchedulerWorkflowInterval(definitionCode, taskCode, dateInterval,
-                        testFlag);
+                workflowInstanceDao.queryLastSchedulerWorkflowInterval(definitionCode, taskCode, dateInterval);
 
         WorkflowInstance lastManualWorkflowInstance =
-                workflowInstanceDao.queryLastManualWorkflowInterval(definitionCode, taskCode, dateInterval, testFlag);
+                workflowInstanceDao.queryLastManualWorkflowInterval(definitionCode, taskCode, dateInterval);
 
         if (lastManualWorkflowInstance == null) {
             return lastSchedulerWorkflowInstance;
@@ -360,7 +348,7 @@ public class DependentExecute {
         } else if (state.isSuccess()) {
             return DependResult.SUCCESS;
         } else {
-            if (workflowInstance.getState().isRunning()
+            if (!workflowInstance.getState().isFinalState()
                     && taskInstance.getRetryTimes() < taskInstance.getMaxRetryTimes()) {
                 log.info("taskDefinitionCode: {}, taskDefinitionName: {}, retryTimes: {}, maxRetryTimes: {}",
                         taskInstance.getTaskCode(), taskInstance.getName(), taskInstance.getRetryTimes(),
@@ -380,9 +368,9 @@ public class DependentExecute {
      * @param currentTime current time
      * @return boolean
      */
-    public boolean finish(Date currentTime, int testFlag, DependentParameters.DependentFailurePolicyEnum failurePolicy,
+    public boolean finish(Date currentTime, DependentParameters.DependentFailurePolicyEnum failurePolicy,
                           Integer failureWaitingTime) {
-        DependResult modelDependResult = getModelDependResult(currentTime, testFlag);
+        DependResult modelDependResult = getModelDependResult(currentTime);
         if (modelDependResult == DependResult.WAITING) {
             return false;
         } else if (modelDependResult == DependResult.FAILED && DEPENDENT_FAILURE_WAITING == failurePolicy
@@ -399,7 +387,7 @@ public class DependentExecute {
      * @param currentTime current time
      * @return DependResult
      */
-    public DependResult getModelDependResult(Date currentTime, int testFlag) {
+    public DependResult getModelDependResult(Date currentTime) {
 
         List<DependResult> dependResultList = new ArrayList<>();
 
@@ -413,7 +401,7 @@ public class DependentExecute {
                         dependentItem.getDefinitionCode(), dependentItem.getDepTaskCode());
                 continue;
             }
-            DependResult dependResult = getDependResultForItem(dependentItem, currentTime, testFlag);
+            DependResult dependResult = getDependResultForItem(dependentItem, currentTime);
             if (dependResult != DependResult.WAITING) {
                 dependResultMap.put(dependentItem.getKey(), dependResult);
                 if (dependentItem.getParameterPassing() && !dependItemVarPoolPropertyMap.isEmpty()) {
@@ -435,12 +423,12 @@ public class DependentExecute {
      * @param currentTime current time
      * @return DependResult
      */
-    private DependResult getDependResultForItem(DependentItem item, Date currentTime, int testFlag) {
+    private DependResult getDependResultForItem(DependentItem item, Date currentTime) {
         String key = item.getKey();
         if (dependResultMap.containsKey(key)) {
             return dependResultMap.get(key);
         }
-        return getDependentResultForItem(item, currentTime, testFlag);
+        return getDependentResultForItem(item, currentTime);
     }
 
     /**
@@ -465,7 +453,7 @@ public class DependentExecute {
      * query the first workflowInstance by scheduleTime(or startTime if scheduleTime is null)
      */
     public boolean isFirstWorkflowInstance(DependentItem dependentItem) {
-        WorkflowInstance firstWorkflowInstance =
+        WorkflowInstanceSummaryDto firstWorkflowInstance =
                 workflowInstanceDao.queryFirstScheduleWorkflowInstance(dependentItem.getDefinitionCode());
         if (firstWorkflowInstance == null) {
             firstWorkflowInstance =

@@ -17,7 +17,10 @@
 
 package org.apache.dolphinscheduler.server.master.integration;
 
+import org.apache.dolphinscheduler.common.enums.FailureStrategy;
 import org.apache.dolphinscheduler.common.enums.Flag;
+import org.apache.dolphinscheduler.common.enums.TaskDependType;
+import org.apache.dolphinscheduler.common.enums.WarningType;
 import org.apache.dolphinscheduler.dao.entity.Project;
 import org.apache.dolphinscheduler.dao.entity.Schedule;
 import org.apache.dolphinscheduler.dao.entity.WorkflowDefinition;
@@ -62,7 +65,11 @@ public class WorkflowOperator {
                 .workflowDefinitionVersion(workflowTriggerDTO.workflowDefinition.getVersion())
                 .startNodes(workflowTriggerDTO.getRunWorkflowCommandParam().getStartNodes())
                 .startParamList(workflowTriggerDTO.getRunWorkflowCommandParam().getCommandParams())
-                .dryRun(workflowTriggerDTO.dryRun)
+                .dryRun(workflowTriggerDTO.getDryRun())
+                .taskDependType(workflowTriggerDTO.getTaskDependType())
+                .failureStrategy(workflowTriggerDTO.getFailureStrategy())
+                .warningGroupId(workflowTriggerDTO.getWarningGroupId())
+                .warningType(workflowTriggerDTO.getWarningType())
                 .build();
 
         final WorkflowManualTriggerResponse manualTriggerWorkflowResponse =
@@ -150,6 +157,18 @@ public class WorkflowOperator {
 
         @Builder.Default
         private Flag dryRun = Flag.NO;
+
+        @Builder.Default
+        private TaskDependType taskDependType = TaskDependType.TASK_POST;
+
+        @Builder.Default
+        private FailureStrategy failureStrategy = FailureStrategy.CONTINUE;
+
+        @Builder.Default
+        private WarningType warningType = WarningType.NONE;
+
+        @Builder.Default
+        private Integer warningGroupId = null;
     }
 
     @Data

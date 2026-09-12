@@ -14,7 +14,7 @@ Standalone 仅适用于 DolphinScheduler 的快速体验.
 
 ## 下载插件依赖
 
-请参考伪集群部署的[下载插件依赖](../installation/pseudo-cluster.md#下载插件依赖)
+请参考伪集群部署的[下载插件依赖](../installation/pseudo-cluster.md#下载插件依赖)，注意 standalone 最小化运行需要下载插件依赖 `dolphinscheduler-task-shell` 和 `dolphinscheduler-storage-hdfs`
 
 ## 配置用户免密及权限
 
@@ -28,7 +28,7 @@ useradd dolphinscheduler
 echo "dolphinscheduler" | passwd --stdin dolphinscheduler
 
 # 配置 sudo 免密
-sed -i '$adolphinscheduler  ALL=(ALL)  NOPASSWD: NOPASSWD: ALL' /etc/sudoers
+sed -i '$dolphinscheduler  ALL=(ALL)  NOPASSWD: ALL' /etc/sudoers
 sed -i 's/Defaults    requiretty/#Defaults    requiretty/g' /etc/sudoers
 
 # 修改目录权限，使得部署用户对二进制包解压后的 apache-dolphinscheduler-*-bin 目录有操作权限

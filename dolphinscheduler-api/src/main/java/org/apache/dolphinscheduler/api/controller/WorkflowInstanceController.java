@@ -21,23 +21,26 @@ import static org.apache.dolphinscheduler.api.enums.Status.QUERY_WORKFLOW_INSTAN
 
 import org.apache.dolphinscheduler.api.audit.OperatorLog;
 import org.apache.dolphinscheduler.api.audit.enums.AuditType;
-import org.apache.dolphinscheduler.api.dto.DynamicSubWorkflowDto;
+import org.apache.dolphinscheduler.api.dto.gantt.GanttDto;
+import org.apache.dolphinscheduler.api.dto.workflowInstance.WorkflowInstanceTaskListDTO;
+import org.apache.dolphinscheduler.api.dto.workflowInstance.WorkflowInstanceVariablesDTO;
 import org.apache.dolphinscheduler.api.enums.Status;
 import org.apache.dolphinscheduler.api.exceptions.ApiException;
 import org.apache.dolphinscheduler.api.service.WorkflowInstanceService;
+import org.apache.dolphinscheduler.api.utils.PageInfo;
 import org.apache.dolphinscheduler.api.utils.Result;
+import org.apache.dolphinscheduler.api.vo.WorkflowInstanceSummaryVO;
 import org.apache.dolphinscheduler.common.constants.Constants;
 import org.apache.dolphinscheduler.common.enums.WorkflowExecutionStatus;
 import org.apache.dolphinscheduler.dao.entity.User;
+import org.apache.dolphinscheduler.dao.entity.WorkflowDefinition;
 import org.apache.dolphinscheduler.dao.entity.WorkflowInstance;
 import org.apache.dolphinscheduler.plugin.task.api.utils.ParameterUtils;
 
 import org.apache.commons.lang3.StringUtils;
 
-import java.io.IOException;
 import java.text.MessageFormat;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -62,9 +65,6 @@ import io.swagger.v3.oas.annotations.Parameters;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
-/**
- * workflow instance controller
- */
 @Tag(name = "WORKFLOW_INSTANCE_TAG")
 @RestController
 @RequestMapping("/projects/{projectCode}/workflow-instances")
@@ -105,18 +105,18 @@ public class WorkflowInstanceController extends BaseController {
     @GetMapping()
     @ResponseStatus(HttpStatus.OK)
     @ApiException(Status.QUERY_WORKFLOW_INSTANCE_LIST_PAGING_ERROR)
-    public Result queryWorkflowInstanceList(@Parameter(hidden = true) @RequestAttribute(value = Constants.SESSION_USER) User loginUser,
-                                            @Parameter(name = "projectCode", description = "PROJECT_CODE", required = true) @PathVariable long projectCode,
-                                            @RequestParam(value = "workflowDefinitionCode", required = false, defaultValue = "0") long workflowDefinitionCode,
-                                            @RequestParam(value = "searchVal", required = false) String searchVal,
-                                            @RequestParam(value = "executorName", required = false) String executorName,
-                                            @RequestParam(value = "stateType", required = false) WorkflowExecutionStatus stateType,
-                                            @RequestParam(value = "host", required = false) String host,
-                                            @RequestParam(value = "startDate", required = false) String startTime,
-                                            @RequestParam(value = "endDate", required = false) String endTime,
-                                            @RequestParam(value = "otherParamsJson", required = false) String otherParamsJson,
-                                            @RequestParam("pageNo") Integer pageNo,
-                                            @RequestParam("pageSize") Integer pageSize) {
+    public Result<PageInfo<WorkflowInstanceSummaryVO>> queryWorkflowInstanceList(@Parameter(hidden = true) @RequestAttribute(value = Constants.SESSION_USER) User loginUser,
+                                                                                 @Parameter(name = "projectCode", description = "PROJECT_CODE", required = true) @PathVariable long projectCode,
+                                                                                 @RequestParam(value = "workflowDefinitionCode", required = false, defaultValue = "0") long workflowDefinitionCode,
+                                                                                 @RequestParam(value = "searchVal", required = false) String searchVal,
+                                                                                 @RequestParam(value = "executorName", required = false) String executorName,
+                                                                                 @RequestParam(value = "stateType", required = false) WorkflowExecutionStatus stateType,
+                                                                                 @RequestParam(value = "host", required = false) String host,
+                                                                                 @RequestParam(value = "startDate", required = false) String startTime,
+                                                                                 @RequestParam(value = "endDate", required = false) String endTime,
+                                                                                 @RequestParam(value = "otherParamsJson", required = false) String otherParamsJson,
+                                                                                 @RequestParam("pageNo") Integer pageNo,
+                                                                                 @RequestParam("pageSize") Integer pageSize) {
 
         checkPageParams(pageNo, pageSize);
         searchVal = ParameterUtils.handleEscapes(searchVal);
@@ -141,12 +141,12 @@ public class WorkflowInstanceController extends BaseController {
     @GetMapping(value = "/{id}/tasks")
     @ResponseStatus(HttpStatus.OK)
     @ApiException(Status.QUERY_TASK_LIST_BY_WORKFLOW_INSTANCE_ID_ERROR)
-    public Result queryTaskListByWorkflowInstanceId(@Parameter(hidden = true) @RequestAttribute(value = Constants.SESSION_USER) User loginUser,
-                                                    @Parameter(name = "projectCode", description = "PROJECT_CODE", required = true) @PathVariable long projectCode,
-                                                    @PathVariable("id") Integer id) throws IOException {
-        Map<String, Object> result =
+    public Result<WorkflowInstanceTaskListDTO> queryTaskListByWorkflowInstanceId(@Parameter(hidden = true) @RequestAttribute(value = Constants.SESSION_USER) User loginUser,
+                                                                                 @Parameter(name = "projectCode", description = "PROJECT_CODE", required = true) @PathVariable long projectCode,
+                                                                                 @PathVariable("id") Integer id) {
+        WorkflowInstanceTaskListDTO taskList =
                 workflowInstanceService.queryTaskListByWorkflowInstanceId(loginUser, projectCode, id);
-        return returnDataList(result);
+        return Result.success(taskList);
     }
 
     /**
@@ -177,19 +177,19 @@ public class WorkflowInstanceController extends BaseController {
     @ResponseStatus(HttpStatus.OK)
     @ApiException(Status.UPDATE_WORKFLOW_INSTANCE_ERROR)
     @OperatorLog(auditType = AuditType.WORKFLOW_INSTANCE_UPDATE)
-    public Result updateWorkflowInstance(@Parameter(hidden = true) @RequestAttribute(value = Constants.SESSION_USER) User loginUser,
-                                         @Parameter(name = "projectCode", description = "PROJECT_CODE", required = true) @PathVariable long projectCode,
-                                         @RequestParam(value = "taskRelationJson", required = true) String taskRelationJson,
-                                         @RequestParam(value = "taskDefinitionJson", required = true) String taskDefinitionJson,
-                                         @PathVariable(value = "id") Integer id,
-                                         @RequestParam(value = "scheduleTime", required = false) String scheduleTime,
-                                         @RequestParam(value = "syncDefine", required = true) Boolean syncDefine,
-                                         @RequestParam(value = "globalParams", required = false, defaultValue = "[]") String globalParams,
-                                         @RequestParam(value = "locations", required = false) String locations,
-                                         @RequestParam(value = "timeout", required = false, defaultValue = "0") int timeout) {
-        Map<String, Object> result = workflowInstanceService.updateWorkflowInstance(loginUser, projectCode, id,
-                taskRelationJson, taskDefinitionJson, scheduleTime, syncDefine, globalParams, locations, timeout);
-        return returnDataList(result);
+    public Result<WorkflowDefinition> updateWorkflowInstance(@Parameter(hidden = true) @RequestAttribute(value = Constants.SESSION_USER) User loginUser,
+                                                             @Parameter(name = "projectCode", description = "PROJECT_CODE", required = true) @PathVariable long projectCode,
+                                                             @RequestParam(value = "taskRelationJson", required = true) String taskRelationJson,
+                                                             @RequestParam(value = "taskDefinitionJson", required = true) String taskDefinitionJson,
+                                                             @PathVariable(value = "id") Integer id,
+                                                             @RequestParam(value = "scheduleTime", required = false) String scheduleTime,
+                                                             @RequestParam(value = "syncDefine", required = true) Boolean syncDefine,
+                                                             @RequestParam(value = "globalParams", required = false, defaultValue = "[]") String globalParams,
+                                                             @RequestParam(value = "locations", required = false) String locations,
+                                                             @RequestParam(value = "timeout", required = false, defaultValue = "0") int timeout) {
+        WorkflowDefinition workflowDefinition = workflowInstanceService.updateWorkflowInstance(loginUser, projectCode,
+                id, taskRelationJson, taskDefinitionJson, scheduleTime, syncDefine, globalParams, locations, timeout);
+        return Result.success(workflowDefinition);
     }
 
     /**
@@ -207,11 +207,12 @@ public class WorkflowInstanceController extends BaseController {
     @GetMapping(value = "/{id}")
     @ResponseStatus(HttpStatus.OK)
     @ApiException(Status.QUERY_WORKFLOW_INSTANCE_BY_ID_ERROR)
-    public Result queryWorkflowInstanceById(@Parameter(hidden = true) @RequestAttribute(value = Constants.SESSION_USER) User loginUser,
-                                            @Parameter(name = "projectCode", description = "PROJECT_CODE", required = true) @PathVariable long projectCode,
-                                            @PathVariable("id") Integer id) {
-        Map<String, Object> result = workflowInstanceService.queryWorkflowInstanceById(loginUser, projectCode, id);
-        return returnDataList(result);
+    public Result<WorkflowInstance> queryWorkflowInstanceById(@Parameter(hidden = true) @RequestAttribute(value = Constants.SESSION_USER) User loginUser,
+                                                              @Parameter(name = "projectCode", description = "PROJECT_CODE", required = true) @PathVariable long projectCode,
+                                                              @PathVariable("id") Integer id) {
+        WorkflowInstance workflowInstance =
+                workflowInstanceService.queryWorkflowInstanceById(loginUser, projectCode, id);
+        return Result.success(workflowInstance);
     }
 
     /**
@@ -233,14 +234,15 @@ public class WorkflowInstanceController extends BaseController {
     @GetMapping(value = "/top-n")
     @ResponseStatus(HttpStatus.OK)
     @ApiException(Status.QUERY_WORKFLOW_INSTANCE_BY_ID_ERROR)
-    public Result<WorkflowInstance> queryTopNLongestRunningWorkflowInstance(@Parameter(hidden = true) @RequestAttribute(value = Constants.SESSION_USER) User loginUser,
-                                                                            @Parameter(name = "projectCode", description = "PROJECT_CODE", required = true) @PathVariable long projectCode,
-                                                                            @RequestParam("size") Integer size,
-                                                                            @RequestParam(value = "startTime", required = true) String startTime,
-                                                                            @RequestParam(value = "endTime", required = true) String endTime) {
-        Map<String, Object> result = workflowInstanceService.queryTopNLongestRunningWorkflowInstance(loginUser,
-                projectCode, size, startTime, endTime);
-        return returnDataList(result);
+    public Result<List<WorkflowInstanceSummaryVO>> queryTopNLongestRunningWorkflowInstance(@Parameter(hidden = true) @RequestAttribute(value = Constants.SESSION_USER) User loginUser,
+                                                                                           @Parameter(name = "projectCode", description = "PROJECT_CODE", required = true) @PathVariable long projectCode,
+                                                                                           @RequestParam("size") Integer size,
+                                                                                           @RequestParam(value = "startTime", required = true) String startTime,
+                                                                                           @RequestParam(value = "endTime", required = true) String endTime) {
+        List<WorkflowInstanceSummaryVO> workflowInstances =
+                workflowInstanceService.queryTopNLongestRunningWorkflowInstance(
+                        loginUser, projectCode, size, startTime, endTime);
+        return Result.success(workflowInstances);
     }
 
     /**
@@ -282,12 +284,12 @@ public class WorkflowInstanceController extends BaseController {
     @GetMapping(value = "/query-sub-by-parent")
     @ResponseStatus(HttpStatus.OK)
     @ApiException(Status.QUERY_SUB_WORKFLOW_INSTANCE_DETAIL_INFO_BY_TASK_ID_ERROR)
-    public Result querySubWorkflowInstanceByTaskId(@Parameter(hidden = true) @RequestAttribute(value = Constants.SESSION_USER) User loginUser,
-                                                   @Parameter(name = "projectCode", description = "PROJECT_CODE", required = true) @PathVariable long projectCode,
-                                                   @RequestParam("taskId") Integer taskId) {
-        Map<String, Object> result =
+    public Result<Map<String, Integer>> querySubWorkflowInstanceByTaskId(@Parameter(hidden = true) @RequestAttribute(value = Constants.SESSION_USER) User loginUser,
+                                                                         @Parameter(name = "projectCode", description = "PROJECT_CODE", required = true) @PathVariable long projectCode,
+                                                                         @RequestParam("taskId") Integer taskId) {
+        Map<String, Integer> data =
                 workflowInstanceService.querySubWorkflowInstanceByTaskId(loginUser, projectCode, taskId);
-        return returnDataList(result);
+        return Result.success(data);
     }
 
     /**
@@ -305,32 +307,12 @@ public class WorkflowInstanceController extends BaseController {
     @GetMapping(value = "/query-parent-by-sub")
     @ResponseStatus(HttpStatus.OK)
     @ApiException(Status.QUERY_PARENT_WORKFLOW_INSTANCE_DETAIL_INFO_BY_SUB_WORKFLOW_INSTANCE_ID_ERROR)
-    public Result queryParentInstanceBySubId(@Parameter(hidden = true) @RequestAttribute(value = Constants.SESSION_USER) User loginUser,
-                                             @Parameter(name = "projectCode", description = "PROJECT_CODE", required = true) @PathVariable long projectCode,
-                                             @RequestParam("subId") Integer subId) {
-        Map<String, Object> result = workflowInstanceService.queryParentInstanceBySubId(loginUser, projectCode, subId);
-        return returnDataList(result);
-    }
-
-    /**
-     * query dynamic sub workflow instance detail info by task id
-     *
-     * @param loginUser login user
-     * @param taskId task id
-     * @return sub workflow instance detail
-     */
-    @Operation(summary = "queryDynamicSubWorkflowInstances", description = "QUERY_DYNAMIC_SUB_WORKFLOW_INSTANCE_BY_TASK_CODE_NOTES")
-    @Parameters({
-            @Parameter(name = "taskId", description = "taskInstanceId", required = true, schema = @Schema(implementation = int.class, example = "100"))
-    })
-    @GetMapping(value = "/query-dynamic-sub-workflows")
-    @ResponseStatus(HttpStatus.OK)
-    @ApiException(Status.QUERY_SUB_WORKFLOW_INSTANCE_DETAIL_INFO_BY_TASK_ID_ERROR)
-    public Result<List<DynamicSubWorkflowDto>> queryDynamicSubWorkflowInstances(@Parameter(hidden = true) @RequestAttribute(value = Constants.SESSION_USER) User loginUser,
-                                                                                @RequestParam("taskId") Integer taskId) {
-        List<DynamicSubWorkflowDto> dynamicSubWorkflowDtos =
-                workflowInstanceService.queryDynamicSubWorkflowInstances(loginUser, taskId);
-        return new Result(Status.SUCCESS.getCode(), Status.SUCCESS.getMsg(), dynamicSubWorkflowDtos);
+    public Result<Map<String, Integer>> queryParentInstanceBySubId(@Parameter(hidden = true) @RequestAttribute(value = Constants.SESSION_USER) User loginUser,
+                                                                   @Parameter(name = "projectCode", description = "PROJECT_CODE", required = true) @PathVariable long projectCode,
+                                                                   @RequestParam("subId") Integer subId) {
+        Map<String, Integer> data =
+                workflowInstanceService.queryParentInstanceBySubId(loginUser, projectCode, subId);
+        return Result.success(data);
     }
 
     /**
@@ -347,11 +329,11 @@ public class WorkflowInstanceController extends BaseController {
     @GetMapping(value = "/{id}/view-variables")
     @ResponseStatus(HttpStatus.OK)
     @ApiException(Status.QUERY_WORKFLOW_INSTANCE_ALL_VARIABLES_ERROR)
-    public Result viewVariables(@Parameter(hidden = true) @RequestAttribute(value = Constants.SESSION_USER) User loginUser,
-                                @Parameter(name = "projectCode", description = "PROJECT_CODE", required = true) @PathVariable long projectCode,
-                                @PathVariable("id") Integer id) {
-        Map<String, Object> result = workflowInstanceService.viewVariables(projectCode, id);
-        return returnDataList(result);
+    public Result<WorkflowInstanceVariablesDTO> viewVariables(@Parameter(hidden = true) @RequestAttribute(value = Constants.SESSION_USER) User loginUser,
+                                                              @Parameter(name = "projectCode", description = "PROJECT_CODE", required = true) @PathVariable long projectCode,
+                                                              @PathVariable("id") Integer id) {
+        WorkflowInstanceVariablesDTO variables = workflowInstanceService.viewVariables(loginUser, projectCode, id);
+        return Result.success(variables);
     }
 
     /**
@@ -369,11 +351,11 @@ public class WorkflowInstanceController extends BaseController {
     @GetMapping(value = "/{id}/view-gantt")
     @ResponseStatus(HttpStatus.OK)
     @ApiException(Status.ENCAPSULATION_WORKFLOW_INSTANCE_GANTT_STRUCTURE_ERROR)
-    public Result viewTree(@Parameter(hidden = true) @RequestAttribute(value = Constants.SESSION_USER) User loginUser,
-                           @Parameter(name = "projectCode", description = "PROJECT_CODE", required = true) @PathVariable long projectCode,
-                           @PathVariable("id") Integer id) throws Exception {
-        Map<String, Object> result = workflowInstanceService.viewGantt(projectCode, id);
-        return returnDataList(result);
+    public Result<GanttDto> viewTree(@Parameter(hidden = true) @RequestAttribute(value = Constants.SESSION_USER) User loginUser,
+                                     @Parameter(name = "projectCode", description = "PROJECT_CODE", required = true) @PathVariable long projectCode,
+                                     @PathVariable("id") Integer id) throws Exception {
+        GanttDto ganttDto = workflowInstanceService.viewGantt(loginUser, projectCode, id);
+        return Result.success(ganttDto);
     }
 
     /**
@@ -394,11 +376,9 @@ public class WorkflowInstanceController extends BaseController {
     @ResponseStatus(HttpStatus.OK)
     @ApiException(Status.BATCH_DELETE_WORKFLOW_INSTANCE_BY_IDS_ERROR)
     @OperatorLog(auditType = AuditType.WORKFLOW_INSTANCE_BATCH_DELETE)
-    public Result batchDeleteWorkflowInstanceByIds(@RequestAttribute(value = Constants.SESSION_USER) User loginUser,
-                                                   @PathVariable long projectCode,
-                                                   @RequestParam("workflowInstanceIds") String workflowInstanceIds) {
-        // task queue
-        Map<String, Object> result = new HashMap<>();
+    public Result<Void> batchDeleteWorkflowInstanceByIds(@RequestAttribute(value = Constants.SESSION_USER) User loginUser,
+                                                         @PathVariable long projectCode,
+                                                         @RequestParam("workflowInstanceIds") String workflowInstanceIds) {
         List<String> deleteFailedIdList = new ArrayList<>();
         if (!StringUtils.isEmpty(workflowInstanceIds)) {
             String[] workflowInstanceIdArray = workflowInstanceIds.split(Constants.COMMA);
@@ -415,11 +395,10 @@ public class WorkflowInstanceController extends BaseController {
             }
         }
         if (!deleteFailedIdList.isEmpty()) {
-            putMsg(result, Status.BATCH_DELETE_WORKFLOW_INSTANCE_BY_IDS_ERROR, String.join("\n", deleteFailedIdList));
-        } else {
-            putMsg(result, Status.SUCCESS);
+            return Result.errorWithArgs(Status.BATCH_DELETE_WORKFLOW_INSTANCE_BY_IDS_ERROR,
+                    String.join("\n", deleteFailedIdList));
         }
-        return returnDataList(result);
+        return Result.success();
     }
 
     // Todo: This is unstable, in some case the command trigger failed, we cannot get workflow instance
@@ -434,10 +413,11 @@ public class WorkflowInstanceController extends BaseController {
     @GetMapping("/trigger")
     @ResponseStatus(HttpStatus.OK)
     @ApiException(QUERY_WORKFLOW_INSTANCE_LIST_PAGING_ERROR)
-    public Result queryWorkflowInstancesByTriggerCode(@RequestAttribute(value = Constants.SESSION_USER) User loginUser,
-                                                      @PathVariable long projectCode,
-                                                      @RequestParam(value = "triggerCode") Long triggerCode) {
-        Map<String, Object> result = workflowInstanceService.queryByTriggerCode(loginUser, projectCode, triggerCode);
-        return returnDataList(result);
+    public Result<List<WorkflowInstanceSummaryVO>> queryWorkflowInstancesByTriggerCode(@RequestAttribute(value = Constants.SESSION_USER) User loginUser,
+                                                                                       @PathVariable long projectCode,
+                                                                                       @RequestParam(value = "triggerCode") Long triggerCode) {
+        List<WorkflowInstanceSummaryVO> workflowInstances =
+                workflowInstanceService.queryByTriggerCode(loginUser, projectCode, triggerCode);
+        return Result.success(workflowInstances);
     }
 }

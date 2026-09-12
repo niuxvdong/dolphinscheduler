@@ -23,7 +23,12 @@ import static org.awaitility.Awaitility.await;
 import org.apache.dolphinscheduler.common.enums.Flag;
 import org.apache.dolphinscheduler.common.enums.WorkflowExecutionStatus;
 import org.apache.dolphinscheduler.dao.entity.TaskInstance;
+import org.apache.dolphinscheduler.dao.entity.WorkflowDefinition;
 import org.apache.dolphinscheduler.dao.entity.WorkflowInstance;
+import org.apache.dolphinscheduler.extract.base.client.Clients;
+import org.apache.dolphinscheduler.extract.master.IWorkflowControlClient;
+import org.apache.dolphinscheduler.extract.master.transportor.workflow.WorkflowInstanceStopRequest;
+import org.apache.dolphinscheduler.extract.master.transportor.workflow.WorkflowInstanceStopResponse;
 import org.apache.dolphinscheduler.plugin.task.api.enums.TaskExecutionStatus;
 import org.apache.dolphinscheduler.server.master.AbstractMasterIntegrationTestCase;
 import org.apache.dolphinscheduler.server.master.integration.WorkflowTestCaseContext;
@@ -47,7 +52,7 @@ public class WorkflowInstanceRecoverFailureTaskTestCase extends AbstractMasterIn
         final String yaml = "/it/recover_failure_tasks/failure_workflow_with_two_serial_fake_task.yaml";
         final WorkflowTestCaseContext context = workflowTestCaseContextFactory.initializeContextFromYaml(yaml);
 
-        final Integer workflowInstanceId = context.getWorkflowInstance().getId();
+        final Integer workflowInstanceId = context.getWorkflowInstances().get(0).getId();
         workflowOperator.recoverFailureTasks(workflowInstanceId);
 
         await()
@@ -89,4 +94,94 @@ public class WorkflowInstanceRecoverFailureTaskTestCase extends AbstractMasterIn
         masterContainer.assertAllResourceReleased();
     }
 
+    @Test
+    @DisplayName("Test recover failure tasks preserves forced-success task state")
+    public void testRecoverFailureTasks_preservesForcedSuccessTaskState() {
+        final String yaml =
+                "/it/recover_failure_tasks/failure_workflow_with_forced_success_predecessor.yaml";
+        final WorkflowTestCaseContext context = workflowTestCaseContextFactory.initializeContextFromYaml(yaml);
+
+        final Integer workflowInstanceId = context.getWorkflowInstances().get(0).getId();
+        workflowOperator.recoverFailureTasks(workflowInstanceId);
+
+        await()
+                .atMost(Duration.ofMinutes(1))
+                .untilAsserted(() -> {
+                    final WorkflowInstance workflowInstance = repository.queryWorkflowInstance(workflowInstanceId);
+                    assertThat(workflowInstance.getState())
+                            .isEqualTo(WorkflowExecutionStatus.SUCCESS);
+                    assertThat(workflowInstance.getRunTimes())
+                            .isEqualTo(2);
+
+                    final List<TaskInstance> taskInstances = repository.queryTaskInstance(workflowInstanceId);
+                    assertThat(taskInstances)
+                            .hasSize(3);
+
+                    assertThat(taskInstances)
+                            .filteredOn(t -> "A".equals(t.getName()))
+                            .singleElement()
+                            .matches(t -> t.getState() == TaskExecutionStatus.FORCED_SUCCESS)
+                            .matches(t -> t.getFlag() == Flag.YES);
+
+                    assertThat(taskInstances)
+                            .filteredOn(t -> "B".equals(t.getName()))
+                            .anySatisfy(t -> {
+                                assertThat(t.getState()).isEqualTo(TaskExecutionStatus.FAILURE);
+                                assertThat(t.getFlag()).isEqualTo(Flag.NO);
+                            })
+                            .anySatisfy(t -> {
+                                assertThat(t.getState()).isEqualTo(TaskExecutionStatus.SUCCESS);
+                                assertThat(t.getFlag()).isEqualTo(Flag.YES);
+                                assertThat(t.getLogPath()).isNotEmpty();
+                            });
+                });
+        masterContainer.assertAllResourceReleased();
+    }
+
+    @Test
+    @DisplayName("Test recover a failure workflow from another master")
+    public void testRecoverFailureWorkflow_from_another_master() {
+        final String yaml = "/it/recover_failure_tasks/failure_workflow_from_another_master.yaml";
+        final WorkflowTestCaseContext context = workflowTestCaseContextFactory.initializeContextFromYaml(yaml);
+        final WorkflowDefinition workflow = context.getOneWorkflow();
+
+        final Integer workflowInstanceId = context.getWorkflowInstances().get(0).getId();
+        workflowOperator.recoverFailureTasks(workflowInstanceId);
+
+        await()
+                .atMost(Duration.ofMinutes(1))
+                .untilAsserted(() -> {
+                    assertThat(repository.queryWorkflowInstance(workflow))
+                            .hasSize(1)
+                            .anySatisfy(workflowInstance -> {
+                                assertThat(workflowInstance.getState())
+                                        .isEqualTo(WorkflowExecutionStatus.RUNNING_EXECUTION);
+                                assertThat(workflowInstance.getName())
+                                        .isEqualTo("workflow_with_one_fake_task_killed-20250322201900000");
+
+                                final WorkflowInstanceStopResponse stopResponse = Clients
+                                        .withService(IWorkflowControlClient.class)
+                                        .withHost(workflowInstance.getHost())
+                                        .stopWorkflowInstance(
+                                                new WorkflowInstanceStopRequest(workflowInstance.getId()));
+
+                                assertThat(stopResponse != null && stopResponse.isSuccess()).isTrue();
+                            });
+                });
+
+        await()
+                .atMost(Duration.ofMinutes(1))
+                .untilAsserted(() -> {
+                    assertThat(repository.queryWorkflowInstance(workflow))
+                            .hasSize(1)
+                            .anySatisfy(workflowInstance -> {
+                                assertThat(workflowInstance.getState())
+                                        .isEqualTo(WorkflowExecutionStatus.STOP);
+                                assertThat(workflowInstance.getName())
+                                        .isEqualTo("workflow_with_one_fake_task_killed-20250322201900000");
+                            });
+                });
+
+        masterContainer.assertAllResourceReleased();
+    }
 }

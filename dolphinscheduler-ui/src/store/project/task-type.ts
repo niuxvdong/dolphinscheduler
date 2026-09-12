@@ -54,6 +54,9 @@ export const TASK_TYPES_MAP = {
   DEPENDENT: {
     alias: 'DEPENDENT'
   },
+  GRPC: {
+    alias: 'GRPC'
+  },
   HTTP: {
     alias: 'HTTP'
   },
@@ -76,6 +79,10 @@ export const TASK_TYPES_MAP = {
   },
   EMR: {
     alias: 'AmazonEMR',
+    helperLinkDisable: true
+  },
+  EMR_SERVERLESS: {
+    alias: 'AmazonEMRServerless',
     helperLinkDisable: true
   },
   ZEPPELIN: {
@@ -122,10 +129,6 @@ export const TASK_TYPES_MAP = {
     alias: 'FLINK_STREAM',
     helperLinkDisable: true,
     taskExecuteType: 'STREAM'
-  },
-  PYTORCH: {
-    alias: 'Pytorch',
-    helperLinkDisable: true
   },
   HIVECLI: {
     alias: 'HIVECLI',
